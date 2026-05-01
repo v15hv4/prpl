@@ -1,6 +1,6 @@
-# Terrain-Style Security Assessment Methodology
+# Security Assessment Methodology
 
-Reference for conducting comprehensive external security assessments matching Terrain's
+Reference for conducting comprehensive external security assessments using
 autonomous agent methodology.
 
 ## Assessment Phases

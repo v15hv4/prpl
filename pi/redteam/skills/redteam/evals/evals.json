@@ -52,7 +52,7 @@
     },
     {
       "name": "full_assessment",
-      "description": "Test full Terrain-style assessment",
+      "description": "Test full comprehensive assessment",
       "input": "/redteam-full example.com",
       "expectedBehaviors": [
         "Runs DNS enumeration in parallel",
@@ -78,9 +78,9 @@
     }
   ],
   "qualityCriteria": {
-    "coverage": "Must test all phases from Terrain methodology",
+    "coverage": "Must test all phases from the assessment methodology",
     "parallelism": "DNS and infrastructure scans should run in parallel",
-    "output_format": "Results should match Terrain report structure",
+    "output_format": "Results should match the assessment report structure",
     "findings": "All vulnerabilities must be documented with record_finding"
   }
 }

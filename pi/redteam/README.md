@@ -39,7 +39,7 @@ The `/analyze` command performs reconnaissance and then uses AI to generate crea
 
 | Command | Description |
 |---------|-------------|
-| `/redteam <domain>` | 🎯 **Terrain-style assessment** - subdomains, infrastructure, services, endpoints, CORS |
+| `/redteam <domain>` | 🎯 **Thorough assessment** - subdomains, infrastructure, services, endpoints, CORS |
 | `/redteam-quick <target>` | 🚀 **Quick parallel scan** - nmap, nikto, nuclei, gobuster simultaneously |
 
 ### Individual Scans

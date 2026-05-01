@@ -2,7 +2,7 @@
 # vi: set ft=ruby :
 
 # Red Team Security Assessment VM
-# Includes all tools needed for Terrain-style security assessments
+# Includes all tools needed for thorough security assessments
 
 Vagrant.configure("2") do |config|
   # Use Kali Linux for comprehensive security tooling

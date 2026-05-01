@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Security Assessment Report Generator
-Generates Terrain-style security assessment reports from scan results.
+Generates security assessment reports from scan results.
 """
 
 import json

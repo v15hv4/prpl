@@ -1,7 +1,7 @@
 ---
 name: redteam
 description: |
-  Comprehensive external red team assessment of a domain. Performs Terrain-level security testing:
+  Comprehensive external red team assessment of a domain. Performs thorough security testing:
   subdomain enumeration, infrastructure fingerprinting, third-party service detection, API endpoint
   discovery, access control testing, CORS testing, S3 bucket enumeration, OAuth/OIDC analysis,
   and response header analysis. Produces a professional security assessment report.
@@ -20,7 +20,7 @@ allowed-tools:
 # /redteam — Comprehensive External Security Assessment
 
 You are an autonomous security agent conducting a professional red team assessment. You think like
-Terrain's autonomous security agents — thorough, systematic, and focused on finding real vulnerabilities
+professional autonomous security agents — thorough, systematic, and focused on finding real vulnerabilities
 that expose customer data, billing operations, and internal infrastructure.
 
 ## User-invocable
@@ -87,7 +87,7 @@ go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
 
 ### Phase 1: DNS & Subdomain Enumeration
 
-**Objective:** Discover all subdomains and DNS infrastructure like Terrain did.
+**Objective:** Discover all subdomains and DNS infrastructure.
 
 #### 1.1 DNS Record Collection
 ```bash
@@ -186,7 +186,7 @@ cat all-subdomains.txt | httpx -silent -status-code -title -tech-detect -o live-
   done > live-hosts.txt
 ```
 
-**Output:** Document all discovered hosts in a table format like Terrain:
+**Output:** Document all discovered hosts in a table format:
 ```
 | Host | Purpose | How Found |
 |------|---------|-----------|
@@ -401,7 +401,7 @@ curl -s "https://api.$TARGET/nonexistent-path-12345" 2>/dev/null | head -20 >> e
 
 ### Phase 5: API Endpoint Discovery
 
-**Objective:** Find all API endpoints like Terrain did (62 endpoint/method combinations).
+**Objective:** Find all API endpoints (targeting 50+ endpoint/method combinations).
 
 #### 5.1 JavaScript Endpoint Extraction
 ```bash
@@ -436,7 +436,7 @@ done
 
 #### 5.3 User Dashboard / Admin Endpoints
 ```bash
-# Specific patterns from Terrain report
+# Specific patterns for thorough testing
 for endpoint in \
   /user_dashboard/users /user_dashboard/users/ \
   /user_dashboard/logs /user_dashboard/logs/ \
@@ -627,7 +627,7 @@ sort -u leaked-headers.txt > leaked-headers-unique.txt
 
 ### Phase 11: Endpoint Method Testing
 
-**Objective:** Test each endpoint with all HTTP methods like Terrain (GET, POST, PUT, DELETE, PATCH, OPTIONS).
+**Objective:** Test each endpoint with all HTTP methods (GET, POST, PUT, DELETE, PATCH, OPTIONS).
 
 ```bash
 # Test methods on discovered endpoints
@@ -672,7 +672,7 @@ cat *-findings.txt 2>/dev/null | grep -vi "critical\|high\|medium" >> all-findin
 
 ### Phase 13: Report Generation
 
-Generate a professional security assessment report in the Terrain format.
+Generate a professional security assessment report.
 
 **Report Structure:**
 ```markdown
@@ -743,7 +743,7 @@ Generate a professional security assessment report in the Terrain format.
 4. **Prioritize by impact** — Customer data exposure > infrastructure info.
 5. **No active exploitation** — Discovery and proof of concept only.
 6. **Use parallelism** — Run independent phases concurrently with subagents.
-7. **Match Terrain quality** — The goal is a report as comprehensive as the example.
+7. **Match professional quality** — The goal is a report as comprehensive as a professional pentest.
 
 ## Output
 

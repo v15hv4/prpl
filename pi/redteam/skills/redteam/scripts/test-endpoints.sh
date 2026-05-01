@@ -1,7 +1,7 @@
 #!/bin/bash
 # API Endpoint Testing Script
 # Tests all discovered endpoints with multiple HTTP methods
-# Produces a table format like Terrain's security assessment
+# Produces a table format for security assessment
 
 TARGET="${1:-api.example.com}"
 AUTH_TOKEN="${2:-}"

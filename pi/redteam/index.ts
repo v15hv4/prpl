@@ -1095,11 +1095,11 @@ ${v.indicators.map(i => `- ${i}`).join("\n")}
   });
 
   // ============================================================
-  // TERRAIN-STYLE COMPREHENSIVE ASSESSMENT
+  // COMPREHENSIVE ASSESSMENT
   // ============================================================
 
   pi.registerCommand("redteam", {
-    description: "🎯 Full Terrain-style security assessment - subdomains, infrastructure, services, endpoints, CORS",
+    description: "🎯 Full thorough security assessment - subdomains, infrastructure, services, endpoints, CORS",
     handler: async (args, ctx) => {
       if (!args) {
         ctx.ui.notify("Usage: /redteam <domain>", "error");
@@ -1115,7 +1115,7 @@ ${v.indicators.map(i => `- ${i}`).join("\n")}
       state.scanResults = {};
       pi.appendEntry("redteam-state", state);
 
-      ctx.ui.notify(`🎯 Starting Terrain-style assessment on ${target}...`, "info");
+      ctx.ui.notify(`🎯 Starting thorough assessment on ${target}...`, "info");
       ctx.ui.notify(`Output directory: ${workDir}`, "info");
 
       // Create working directory
@@ -1366,7 +1366,7 @@ ${v.indicators.map(i => `- ${i}`).join("\n")}
           ctx.ui.notify("✅ API endpoint discovery complete", "info");
         })(),
 
-        // User dashboard / admin endpoints (Terrain-specific)
+        // User dashboard / admin endpoints
         (async () => {
           const dashboard = await execCommand(`
             for endpoint in /user_dashboard/users /user_dashboard/users/ /user_dashboard/logs /user_dashboard/logs/ /user_dashboard/usage /user_dashboard/rotate_token /user_dashboard/notification_emails /tenants/payments/purchase /tenants/payments/purchases /tenants/payments/packages /tenants/slack/webhook /internal /internal/users /authentication/userinfo; do
@@ -1501,7 +1501,7 @@ ${v.indicators.map(i => `- ${i}`).join("\n")}
       }
 
       pi.sendUserMessage(
-        `## 🎯 Terrain-Style Security Assessment - ${target}
+        `## 🎯 Thorough Security Assessment - ${target}
 
 **Duration:** ${duration} minutes
 **Output Directory:** ${workDir}
@@ -1519,7 +1519,7 @@ ${summaryParts.join("\n\n")}
 5. **Check for CORS Issues**: If origin is reflected with credentials, this is CRITICAL
 6. **Note Missing Security Headers**: Each missing header is a finding
 7. **Analyze Accessible Endpoints**: Any 200 responses on dashboard/admin endpoints are concerning
-8. **Generate Terrain-Style Report**: Executive summary, surface area, test results, findings
+8. **Generate Report**: Executive summary, surface area, test results, findings
 
 Be thorough - match the quality of a professional security assessment report.`,
         { deliverAs: "followUp" }
