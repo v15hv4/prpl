@@ -29,18 +29,11 @@ your-project/
 
 | Command | Description |
 |---------|-------------|
-| `/analyze <domain>` | 🧠 **AI Analysis** - Reconnaissance + AI-generated attack variants |
+| `/redteam <domain>` | 🧠 **AI Analysis** - Reconnaissance + AI-generated attack variants |
 | `/list-variants [filter]` | 📝 List generated attack variants |
 | `/test-variants` | 🧪 Run automated tests for generated variants |
 
-The `/analyze` command performs reconnaissance and then uses AI to generate creative attack variants based on the detected technology stack, endpoints, and services. This is the recommended starting point for any engagement.
-
-### Full Engagement
-
-| Command | Description |
-|---------|-------------|
-| `/redteam <domain>` | 🎯 **Thorough assessment** - subdomains, infrastructure, services, endpoints, CORS |
-| `/redteam-quick <target>` | 🚀 **Quick parallel scan** - nmap, nikto, nuclei, gobuster simultaneously |
+The `/redteam` command performs reconnaissance and then uses AI to generate creative attack variants based on the detected technology stack, endpoints, and services. This is the recommended starting point for any engagement.
 
 ### Individual Scans
 
@@ -140,7 +133,7 @@ The extension provides tools the LLM can call:
 
 ```bash
 # 1. Start with AI analysis - generates attack variants
-/analyze target.com
+/redteam target.com
 
 # LLM performs recon, detects tech stack, and generates attack variants
 
@@ -162,7 +155,7 @@ The extension provides tools the LLM can call:
 ### Traditional Workflow
 
 ```bash
-# 1. Run full parallel engagement
+# 1. Run reconnaissance and analysis
 /redteam 192.168.1.100
 
 # LLM analyzes results automatically and records findings
