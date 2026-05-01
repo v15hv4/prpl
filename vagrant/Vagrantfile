@@ -47,12 +47,109 @@ Vagrant.configure("2") do |config|
       seclists \
       wordlists \
       nodejs \
-      npm
+      npm \
+      whatweb \
+      sslscan \
+      masscan \
+      fierce \
+      dnsenum \
+      dnsrecon \
+      wfuzz \
+      arjun \
+      ffuf \
+      testssl.sh \
+      httpie \
+      xmlstarlet \
+      libxml2-utils \
+      chromium \
+      chromium-driver
 
     # fix perms for pi installation
-    mkdir /usr/local/lib/node_modules
+    mkdir -p /usr/local/lib/node_modules
     setfacl -m u:vagrant:rwx /usr/local/lib/node_modules /usr/local/bin
-    
+
+    # Install Go for ProjectDiscovery tools
+    GO_VERSION="1.22.2"
+    if ! command -v go &> /dev/null; then
+      wget -q "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" -O /tmp/go.tar.gz
+      rm -rf /usr/local/go
+      tar -C /usr/local -xzf /tmp/go.tar.gz
+      rm /tmp/go.tar.gz
+    fi
+
+    export GOROOT=/usr/local/go
+    export GOPATH=/home/vagrant/go
+    export PATH=$PATH:$GOROOT/bin:$GOPATH/bin
+    mkdir -p /home/vagrant/go/bin
+    chown -R vagrant:vagrant /home/vagrant/go
+
+    # Add Go to vagrant user's PATH
+    cat >> /home/vagrant/.bashrc << 'GOBASH'
+export GOROOT=/usr/local/go
+export GOPATH=$HOME/go
+export PATH=$PATH:$GOROOT/bin:$GOPATH/bin
+GOBASH
+
+    # Install ProjectDiscovery and other Go tools as vagrant user
+    su - vagrant -c '
+      export GOROOT=/usr/local/go
+      export GOPATH=$HOME/go
+      export PATH=$PATH:$GOROOT/bin:$GOPATH/bin
+
+      # ProjectDiscovery tools
+      go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest 2>/dev/null || true
+      go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest 2>/dev/null || true
+      go install -v github.com/projectdiscovery/dnsx/cmd/dnsx@latest 2>/dev/null || true
+      go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest 2>/dev/null || true
+      go install -v github.com/projectdiscovery/katana/cmd/katana@latest 2>/dev/null || true
+      go install -v github.com/projectdiscovery/naabu/v2/cmd/naabu@latest 2>/dev/null || true
+      go install -v github.com/projectdiscovery/interactsh/cmd/interactsh-client@latest 2>/dev/null || true
+      go install -v github.com/projectdiscovery/tlsx/cmd/tlsx@latest 2>/dev/null || true
+      go install -v github.com/projectdiscovery/alterx/cmd/alterx@latest 2>/dev/null || true
+
+      # URL and parameter tools
+      go install -v github.com/tomnomnom/waybackurls@latest 2>/dev/null || true
+      go install -v github.com/lc/gau/v2/cmd/gau@latest 2>/dev/null || true
+      go install -v github.com/tomnomnom/qsreplace@latest 2>/dev/null || true
+      go install -v github.com/tomnomnom/unfurl@latest 2>/dev/null || true
+
+      # Secret scanning
+      go install -v github.com/zricethezav/gitleaks/v8@latest 2>/dev/null || true
+      go install -v github.com/trufflesecurity/trufflehog/v3@latest 2>/dev/null || true
+
+      # Subdomain takeover
+      go install -v github.com/haccer/subjack@latest 2>/dev/null || true
+
+      # Update nuclei templates
+      nuclei -update-templates 2>/dev/null || true
+    '
+
+    # Install Python tools
+    pip3 install --break-system-packages -q \
+      wafw00f \
+      sslyze \
+      pyjwt \
+      requests \
+      beautifulsoup4 \
+      graphql-core \
+      2>/dev/null || true
+
+    # Install jwt_tool
+    if [ ! -d /opt/jwt_tool ]; then
+      git clone --depth 1 https://github.com/ticarpi/jwt_tool.git /opt/jwt_tool 2>/dev/null || true
+      pip3 install --break-system-packages -q -r /opt/jwt_tool/requirements.txt 2>/dev/null || true
+      ln -sf /opt/jwt_tool/jwt_tool.py /usr/local/bin/jwt_tool 2>/dev/null || true
+      chmod +x /opt/jwt_tool/jwt_tool.py 2>/dev/null || true
+    fi
+
+    # Install ysoserial for Java deserialization testing
+    if [ ! -f /opt/ysoserial.jar ]; then
+      wget -q "https://github.com/frohoff/ysoserial/releases/latest/download/ysoserial-all.jar" -O /opt/ysoserial.jar 2>/dev/null || true
+      echo '#!/bin/bash' > /usr/local/bin/ysoserial
+      echo 'java -jar /opt/ysoserial.jar "$@"' >> /usr/local/bin/ysoserial
+      chmod +x /usr/local/bin/ysoserial
+    fi
+
     echo "Kali Linux Pentest environment ready!"
   SHELL
 

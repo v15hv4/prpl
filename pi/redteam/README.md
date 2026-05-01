@@ -25,6 +25,16 @@ your-project/
 
 ## Commands
 
+### AI-Driven Analysis (NEW)
+
+| Command | Description |
+|---------|-------------|
+| `/analyze <domain>` | 🧠 **AI Analysis** - Reconnaissance + AI-generated attack variants |
+| `/list-variants [filter]` | 📝 List generated attack variants |
+| `/test-variants` | 🧪 Run automated tests for generated variants |
+
+The `/analyze` command performs reconnaissance and then uses AI to generate creative attack variants based on the detected technology stack, endpoints, and services. This is the recommended starting point for any engagement.
+
 ### Full Engagement
 
 | Command | Description |
@@ -42,6 +52,19 @@ your-project/
 | `/webscan <url>` | 🌐 Web directory enumeration and sensitive file check |
 | `/sqli <url>` | 💉 SQL injection testing with sqlmap |
 | `/bruteforce <target> <service>` | 🔑 Credential brute force (ssh, ftp, http-post) |
+
+### Advanced Testing (NEW)
+
+| Command | Description |
+|---------|-------------|
+| `/jwt <token>` | 🔐 JWT security testing - algorithm confusion, expiration, claims |
+| `/ssrf <url>` | 🌐 SSRF testing - cloud metadata, internal services, protocol smuggling |
+| `/xxe <endpoint>` | 📄 XXE testing - XML external entity injection |
+| `/waf <url>` | 🛡️ WAF detection and fingerprinting |
+| `/takeover <domain>` | 🎯 Subdomain takeover detection |
+| `/params <url>` | 🔍 Hidden parameter discovery |
+| `/secrets <domain>` | 🔑 Secret and credential scanning |
+| `/graphql <endpoint>` | 📊 GraphQL security testing |
 
 ### Reconnaissance
 
@@ -72,6 +95,9 @@ The extension provides tools the LLM can call:
 | `list_findings` | List all recorded findings |
 | `run_command` | Execute an additional security command |
 | `engagement_info` | Get engagement status |
+| `generate_attack_variants` | Generate creative attack variants based on reconnaissance |
+| `save_attack_variants` | Save generated variants to the engagement state |
+| `list_attack_variants` | List all generated attack variants with full details |
 
 ## How It Works
 
@@ -108,7 +134,32 @@ The extension provides tools the LLM can call:
 └─────────────────────────────────────────────────────────┘
 ```
 
-## Example Workflow
+## Example Workflows
+
+### AI-Driven Workflow (Recommended)
+
+```bash
+# 1. Start with AI analysis - generates attack variants
+/analyze target.com
+
+# LLM performs recon, detects tech stack, and generates attack variants
+
+# 2. Review generated variants
+/list-variants
+
+# 3. Run automated tests from variants
+/test-variants
+
+# 4. Run specific tests based on tech stack
+/jwt eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+/graphql https://api.target.com/graphql
+/ssrf 'https://api.target.com/fetch?url='
+
+# 5. Generate report
+/report
+```
+
+### Traditional Workflow
 
 ```bash
 # 1. Run full parallel engagement
@@ -119,6 +170,8 @@ The extension provides tools the LLM can call:
 # 2. Run additional targeted scans based on LLM recommendations
 /sqli "http://192.168.1.100/page.php?id=1"
 /bruteforce 192.168.1.100 ssh
+/waf http://192.168.1.100
+/secrets 192.168.1.100
 
 # 3. Check status
 /status
@@ -127,20 +180,72 @@ The extension provides tools the LLM can call:
 /report
 ```
 
+### Advanced Testing Workflow
+
+```bash
+# JWT attacks
+/jwt eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
+
+# SSRF with OOB detection
+/ssrf 'https://api.target.com/webhook?url='
+
+# XXE on XML endpoints
+/xxe https://api.target.com/import
+
+# GraphQL introspection and batching
+/graphql https://api.target.com/graphql
+
+# Subdomain takeover
+/takeover target.com
+
+# Secret scanning
+/secrets target.com
+```
+
 ## Required Tools
 
 The extension expects these tools to be installed (standard on Kali Linux):
 
-**Reconnaissance**: nmap, whatweb, dig
-**Vulnerability**: nikto, nuclei, sslscan
-**Web**: gobuster, dirb, curl
-**Exploitation**: sqlmap
-**Credentials**: hydra
+### Core Tools
+- **Reconnaissance**: nmap, whatweb, dig, subfinder, httpx, dnsx
+- **Vulnerability**: nikto, nuclei, sslscan, sslyze
+- **Web**: gobuster, dirb, ffuf, curl, katana, arjun
+- **Exploitation**: sqlmap, ysoserial
+- **Credentials**: hydra, jwt_tool
+- **OOB Testing**: interactsh-client
+- **Secret Scanning**: gitleaks, trufflehog
+- **WAF Detection**: wafw00f
+- **Subdomain Takeover**: subjack
 
-Install on Debian/Ubuntu/Kali:
+### Installation
+
+**Debian/Ubuntu/Kali:**
 ```bash
-sudo apt install nmap nikto gobuster dirb sqlmap hydra whatweb dnsutils
-# nuclei: https://github.com/projectdiscovery/nuclei
+sudo apt install nmap nikto gobuster dirb sqlmap hydra whatweb dnsutils ffuf sslscan
+
+# Go-based tools (ProjectDiscovery)
+go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest
+go install github.com/projectdiscovery/httpx/cmd/httpx@latest
+go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
+go install github.com/projectdiscovery/katana/cmd/katana@latest
+go install github.com/projectdiscovery/interactsh/cmd/interactsh-client@latest
+go install github.com/zricethezav/gitleaks/v8@latest
+go install github.com/haccer/subjack@latest
+
+# Python tools
+pip install wafw00f sslyze pyjwt
+
+# jwt_tool
+git clone https://github.com/ticarpi/jwt_tool.git /opt/jwt_tool
+pip install -r /opt/jwt_tool/requirements.txt
+ln -s /opt/jwt_tool/jwt_tool.py /usr/local/bin/jwt_tool
+```
+
+**Using Vagrant (recommended):**
+```bash
+cd vagrant && vagrant up
+vagrant ssh
+check-tools  # Verify all tools are installed
 ```
 
 ## Findings Severity
@@ -160,6 +265,7 @@ redteam/
 ├── index.ts              # Extension (direct execution + LLM analysis)
 ├── package.json          # Manifest
 ├── README.md             # This file
+├── Vagrantfile           # VM setup with all tools pre-installed
 ├── agents/               # (Legacy - not used in direct execution mode)
 ├── docs/
 │   └── PRD.md
@@ -172,6 +278,33 @@ redteam/
     ├── vapt-report/
     └── web-exploitation/
 ```
+
+## Attack Categories for AI Variant Generation
+
+The AI can generate attack variants in these categories:
+
+| Category | Description |
+|----------|-------------|
+| `authentication_bypass` | Login bypasses, session hijacking, token manipulation |
+| `authorization_flaws` | IDOR, privilege escalation, role confusion |
+| `injection_attacks` | SQLi, NoSQLi, command injection, template injection |
+| `business_logic` | Race conditions, price manipulation, workflow bypasses |
+| `api_security` | BOLA, BFLA, mass assignment, rate limiting |
+| `file_handling` | Upload bypasses, path traversal, arbitrary file read |
+| `cryptographic_issues` | Weak algorithms, key management, padding oracle |
+| `information_disclosure` | Error messages, debug endpoints, stack traces |
+| `ssrf_oob` | SSRF to cloud metadata, internal services, OOB callbacks |
+| `deserialization` | Unsafe deserialization in Java, PHP, Python |
+| `xxe` | XML external entity injection |
+| `jwt_attacks` | Algorithm confusion, none algorithm, key leakage |
+| `race_conditions` | TOCTOU, double-spend, concurrent request abuse |
+| `cache_poisoning` | Web cache poisoning, CDN manipulation |
+| `subdomain_takeover` | Dangling DNS records, unclaimed resources |
+| `cors_misconfig` | Origin reflection, null origin, credentials with wildcard |
+| `csp_bypass` | Content Security Policy bypasses |
+| `prototype_pollution` | JavaScript prototype chain manipulation |
+| `graphql_attacks` | Introspection, batching, nested queries, field enumeration |
+| `websocket_attacks` | CSWSH, message manipulation, auth bypasses |
 
 ## Why This Architecture?
 
