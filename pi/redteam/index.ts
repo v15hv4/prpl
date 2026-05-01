@@ -2045,7 +2045,7 @@ Use \`record_finding\` for any sensitive parameter exposure.`,
           code=$(curl -s -o /dev/null -w "%{http_code}" "$base/$file" --connect-timeout 3 2>/dev/null)
           if [ "$code" = "200" ]; then
             size=$(curl -sI "$base/$file" 2>/dev/null | grep -i content-length | cut -d: -f2 | tr -d ' \r')
-            echo "🔴 FOUND: $file (HTTP 200, ${size:-unknown} bytes)"
+            echo "🔴 FOUND: $file (HTTP 200, \${size:-unknown} bytes)"
           fi
         done
       `, 120);
