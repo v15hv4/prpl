@@ -713,13 +713,7 @@ Write the complete report to \`VAPT_REPORT.md\`.`,
     description: "Record a discovered vulnerability for the VAPT report",
     promptSnippet: "Record a vulnerability finding",
     parameters: Type.Object({
-      severity: Type.Union([
-        Type.Literal("critical"),
-        Type.Literal("high"),
-        Type.Literal("medium"),
-        Type.Literal("low"),
-        Type.Literal("info"),
-      ]),
+      severity: Type.String({ description: "Severity level: critical, high, medium, low, or info (case-insensitive)" }),
       title: Type.String({ description: "Brief title of the vulnerability" }),
       asset: Type.String({ description: "Affected asset (IP, URL, service)" }),
       description: Type.String({ description: "What the vulnerability is" }),
@@ -729,8 +723,17 @@ Write the complete report to \`VAPT_REPORT.md\`.`,
       cvss: Type.Optional(Type.String({ description: "CVSS score if known" })),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+      // Normalize severity to lowercase for case-insensitive matching
+      const normalizedSeverity = params.severity.toLowerCase() as Finding["severity"];
+      const validSeverities = ["critical", "high", "medium", "low", "info"];
+      if (!validSeverities.includes(normalizedSeverity)) {
+        return {
+          type: "error" as const,
+          error: `Invalid severity "${params.severity}". Must be one of: ${validSeverities.join(", ")}`,
+        };
+      }
       const finding: Finding = {
-        severity: params.severity,
+        severity: normalizedSeverity,
         title: params.title,
         asset: params.asset,
         description: params.description,
@@ -747,7 +750,7 @@ Write the complete report to \`VAPT_REPORT.md\`.`,
         content: [
           {
             type: "text",
-            text: `${SEVERITY_EMOJI[params.severity]} Finding recorded: [${params.severity.toUpperCase()}] ${params.title}
+            text: `${SEVERITY_EMOJI[normalizedSeverity]} Finding recorded: [${normalizedSeverity.toUpperCase()}] ${params.title}
 
 Total findings: ${state.findings.length}
 - Critical: ${state.findings.filter((f) => f.severity === "critical").length}
