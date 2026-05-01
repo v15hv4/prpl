@@ -1003,7 +1003,7 @@ Total findings: ${state.findings.length}
           const buckets = await execCommand(`
             domain="${target}"
             base=$(echo $domain | cut -d. -f1)
-            for pattern in "$base" "${target//./-}"; do
+            for pattern in "$base" "\${target//./-}"; do
               for suffix in "" "-assets" "-static" "-uploads" "-backup" "-exports"; do
                 bucket="$pattern$suffix"
                 code=$(curl -s -o /dev/null -w "%{http_code}" "https://$bucket.s3.amazonaws.com" --connect-timeout 3 2>/dev/null)
