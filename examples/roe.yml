@@ -1,17 +1,7 @@
 # Rules of Engagement - PLACEHOLDER
 # ⚠️  UPDATE ALL PLACEHOLDER VALUES BEFORE RUNNING ASSESSMENT
-# This file is the sole source of scope and authorization truth.
 
-assessment:
-  name: "PLACEHOLDER - Update Before Use"
-  id: "ASSESS-0000-000"
-  start_date: "2026-05-17"
-  end_date: "2026-05-31"
-  type: "web-application"  # web-application | api | infrastructure
-
-authorization:
-  contact: "security@example.com"      # UPDATE: authorized contact
-  document: "./authorization.pdf"       # UPDATE: path to signed authorization
+assessment_name: "PLACEHOLDER - Update Before Use"
 
 targets:
   domains:
@@ -24,26 +14,22 @@ exclusions:
   paths: []
     # - "/admin/delete"                 # Global path exclusions
 
-phases:
-  enabled:
-    - passive-recon
-    - active-recon
-    - auth-mapping
-    - vuln-scanning
-    - authz-testing
-    - injection
-    - transport-cors
-    - cloud-infra
-    - business-logic
-    - third-party
-    - admin-panels
-    - headers-cookies
-    - rate-limiting
+allowed_actions:
+  - passive_recon
+  - active_recon
+  - authenticated_testing
+  - vulnerability_scanning
+  - injection_testing
+  - cloud_testing
+  - third_party_testing
+  - rate_limit_testing
 
-  disabled: []
+rate_limits:
+  requests_per_second: 10
+  concurrent_hosts: 2
 
-credentials:
+accounts: {}
   # test_user:
   #   username: "testuser@example.com"
-  #   password: "${TEST_USER_PASSWORD}"  # Use env vars for secrets
-  #   role: "user"
+  #   secret_ref: "env:TEST_USER_PASSWORD"  # Must be env:VAR_NAME format
+  #   role: "standard"                       # standard | admin | free | paid
