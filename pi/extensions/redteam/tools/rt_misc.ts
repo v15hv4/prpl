@@ -1,0 +1,12 @@
+import { tool } from "../lib/tool_runner";
+import { parseHeaders, parseJsonish, parseLines } from "../lib/parsers";
+export const rt_third_party_txt = (domain: string) => tool("rt_third_party_detect_txt", "dig", ["+short", "TXT", domain], { domain }, parseLines);
+export const rt_third_party_mx = (domain: string) => tool("rt_third_party_detect_mx", "dig", ["+short", "MX", domain], { domain }, parseLines);
+export const rt_headers = (url: string) => tool("rt_header_audit", "curl", ["-sSI", url], { url }, parseHeaders);
+export const rt_whatweb = (url: string) => tool("rt_whatweb", "whatweb", ["-a", "3", url], { url }, parseLines);
+export const rt_wappalyzer = (url: string) => tool("rt_wappalyzer", "wappalyzer", [url], { url }, parseJsonish);
+export const rt_shodan_query = (domain: string) => tool("rt_shodan_query", "shodan", ["domain", domain], { domain }, parseLines);
+export const rt_wayback = (domain: string) => tool("rt_wayback", "waybackurls", [domain], { domain }, parseLines);
+export const rt_gau = (domain: string) => tool("rt_gau", "gau", ["--subs", domain], { domain }, parseLines);
+export const rt_breach_check = (domain: string) => tool("rt_breach_check", "h8mail", ["-t", `target@${domain}`], { domain, note: "requires RoE permission and configured sources" }, parseLines, { redactRawAfterParse: true });
+export const rt_k8s_probe = (host: string) => tool("rt_k8s_probe", "curl", ["-ksS", `https://${host}:6443/version`], { host, port: 6443 }, parseJsonish);

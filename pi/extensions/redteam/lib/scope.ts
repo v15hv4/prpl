@@ -1,0 +1,6 @@
+import { RoeSpec, SessionState } from "./types";
+export function isInScope(host: string, roe: RoeSpec): boolean { const h = host.toLowerCase().replace(/^https?:\/\//, "").split(/[/:?#]/)[0]; const match = (pat: string) => pat.startsWith("*.") ? h.endsWith(`.${pat.slice(2)}`) && h !== pat.slice(2) : h === pat; return roe.targets.domains.some(match) && !roe.exclusions.domains.some(match); }
+export function pathAllowed(path: string, roe: RoeSpec): boolean { const p = path.startsWith("/") ? path : `/${path}`; return !roe.exclusions.paths.some((e) => e === "/" || p === e || p.startsWith(e.endsWith("/") ? e : `${e}/`)); }
+export function baseDomains(roe: RoeSpec) { return Array.from(new Set(roe.targets.domains.map((d) => d.replace(/^\*\./, "")))); }
+export async function approvedHosts(roe: RoeSpec, session: SessionState, _dir: string) { const set = new Set<string>(); for (const d of roe.targets.domains) if (!d.startsWith("*.")) set.add(d); for (const c of session.candidates) if (c.approved && isInScope(c.host, roe)) set.add(c.host); return Array.from(set).filter((h) => isInScope(h, roe)); }
+export function candidate(host: string, source: string, reason: string) { return { host: host.toLowerCase(), source, reason, approved: false, discovered_at: new Date().toISOString() }; }

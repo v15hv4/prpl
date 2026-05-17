@@ -1,0 +1,49 @@
+# Rules of Engagement - PLACEHOLDER
+# ⚠️  UPDATE ALL PLACEHOLDER VALUES BEFORE RUNNING ASSESSMENT
+# This file is the sole source of scope and authorization truth.
+
+assessment:
+  name: "PLACEHOLDER - Update Before Use"
+  id: "ASSESS-0000-000"
+  start_date: "2026-05-17"
+  end_date: "2026-05-31"
+  type: "web-application"  # web-application | api | infrastructure
+
+authorization:
+  contact: "security@example.com"      # UPDATE: authorized contact
+  document: "./authorization.pdf"       # UPDATE: path to signed authorization
+
+targets:
+  domains:
+    - "example.com"                     # UPDATE: your target domain
+    # - "*.example.com"                 # Subdomains only (not apex)
+
+exclusions:
+  domains: []
+    # - "payments.example.com"          # Explicitly excluded subdomains
+  paths: []
+    # - "/admin/delete"                 # Global path exclusions
+
+phases:
+  enabled:
+    - passive-recon
+    - active-recon
+    - auth-mapping
+    - vuln-scanning
+    - authz-testing
+    - injection
+    - transport-cors
+    - cloud-infra
+    - business-logic
+    - third-party
+    - admin-panels
+    - headers-cookies
+    - rate-limiting
+
+  disabled: []
+
+credentials:
+  # test_user:
+  #   username: "testuser@example.com"
+  #   password: "${TEST_USER_PASSWORD}"  # Use env vars for secrets
+  #   role: "user"

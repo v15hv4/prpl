@@ -1,0 +1,7 @@
+export function parseLines(stdout: string) { return { lines: stdout.split(/\r?\n/).map((s) => s.trim()).filter(Boolean).slice(0, 10000) }; }
+export function parseSubdomains(stdout: string) { return { subdomains: Array.from(new Set(stdout.split(/\r?\n/).map((s) => s.trim().toLowerCase()).filter((s) => /^[*.a-z0-9.-]+\.[a-z0-9-]+$/.test(s)))) }; }
+export function parseCrtSh(stdout: string) { try { const rows = JSON.parse(stdout); const subs = rows.flatMap((r: any) => String(r.name_value ?? "").split(/\n/)); return parseSubdomains(subs.join("\n")); } catch { return parseLines(stdout); } }
+export function parseJsonish(stdout: string) { try { return JSON.parse(stdout); } catch { return parseLines(stdout); } }
+export function parseJsonLines(stdout: string) { return { items: stdout.split(/\r?\n/).filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return l; } }) }; }
+export function parseHeaders(stdout: string) { const headers: Record<string, string[]> = {}; for (const line of stdout.split(/\r?\n/)) { const idx = line.indexOf(":"); if (idx > 0) { const k = line.slice(0, idx).trim().toLowerCase(); (headers[k] ??= []).push(line.slice(idx + 1).trim()); } } return { status: stdout.match(/^HTTP\/\S+\s+(\d+)/m)?.[1], headers }; }
+export function redact(s: string) { return s.replace(/(authorization:\s*bearer\s+)[\w.\-_=]+/gi, "$1<redacted>").replace(/(cookie:\s*)[^\n\r]+/gi, "$1<redacted>").replace(/(secret|token|password|api[_-]?key)(["'\s:=]+)[^"'\s,}]+/gi, "$1$2<redacted>"); }
