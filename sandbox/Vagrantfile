@@ -29,40 +29,39 @@ Vagrant.configure("2") do |config|
     apt-get update
     apt-get upgrade -y
     
-    # Ensure common pentest tools are installed
+    # Core pentest tools from VAPT methodology
     apt-get install -y \
       nmap \
-      metasploit-framework \
       burpsuite \
       sqlmap \
       gobuster \
-      dirb \
       nikto \
-      hydra \
-      john \
       hashcat \
-      wireshark \
-      netcat-traditional \
-      proxychains4 \
       seclists \
       wordlists \
       nodejs \
       npm \
       whatweb \
-      sslscan \
       masscan \
-      fierce \
-      dnsenum \
-      dnsrecon \
-      wfuzz \
       arjun \
       ffuf \
       testssl.sh \
-      httpie \
-      xmlstarlet \
-      libxml2-utils \
       chromium \
-      chromium-driver
+      chromium-driver \
+      whois \
+      dnsutils \
+      jq \
+      curl \
+      wget \
+      git \
+      python3-pip \
+      python3-venv \
+      amass \
+      theharvester \
+      feroxbuster \
+      wapiti \
+      commix \
+      zaproxy
 
     # fix perms for pi installation
     mkdir -p /usr/local/lib/node_modules
@@ -96,7 +95,7 @@ GOBASH
       export GOPATH=$HOME/go
       export PATH=$PATH:$GOROOT/bin:$GOPATH/bin
 
-      # ProjectDiscovery tools
+      # ProjectDiscovery tools (Phase 1-2)
       go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest 2>/dev/null || true
       go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest 2>/dev/null || true
       go install -v github.com/projectdiscovery/dnsx/cmd/dnsx@latest 2>/dev/null || true
@@ -104,21 +103,29 @@ GOBASH
       go install -v github.com/projectdiscovery/katana/cmd/katana@latest 2>/dev/null || true
       go install -v github.com/projectdiscovery/naabu/v2/cmd/naabu@latest 2>/dev/null || true
       go install -v github.com/projectdiscovery/interactsh/cmd/interactsh-client@latest 2>/dev/null || true
-      go install -v github.com/projectdiscovery/tlsx/cmd/tlsx@latest 2>/dev/null || true
-      go install -v github.com/projectdiscovery/alterx/cmd/alterx@latest 2>/dev/null || true
 
-      # URL and parameter tools
+      # URL discovery tools (Phase 1.4)
       go install -v github.com/tomnomnom/waybackurls@latest 2>/dev/null || true
       go install -v github.com/lc/gau/v2/cmd/gau@latest 2>/dev/null || true
-      go install -v github.com/tomnomnom/qsreplace@latest 2>/dev/null || true
-      go install -v github.com/tomnomnom/unfurl@latest 2>/dev/null || true
+      go install -v github.com/tomnomnom/assetfinder@latest 2>/dev/null || true
 
-      # Secret scanning
-      go install -v github.com/zricethezav/gitleaks/v8@latest 2>/dev/null || true
-      go install -v github.com/trufflesecurity/trufflehog/v3@latest 2>/dev/null || true
-
-      # Subdomain takeover
+      # Subdomain permutation & takeover (Phase 2.2, 2.6)
+      go install -v github.com/Josue87/gotator@latest 2>/dev/null || true
       go install -v github.com/haccer/subjack@latest 2>/dev/null || true
+      go install -v github.com/LukaSikic/subzy@latest 2>/dev/null || true
+
+      # JS analysis (Phase 2.7)
+      go install -v github.com/BishopFox/jsluice/cmd/jsluice@latest 2>/dev/null || true
+
+      # API endpoint enumeration (Phase 3.2)
+      go install -v github.com/assetnote/kiterunner/cmd/kr@latest 2>/dev/null || true
+      go install -v github.com/Sh1Yo/x8@latest 2>/dev/null || true
+
+      # XSS testing (Phase 6.3)
+      go install -v github.com/hahwul/dalfox/v2@latest 2>/dev/null || true
+
+      # HTTP smuggling (Phase 7.3)
+      go install -v github.com/defparam/smuggler@latest 2>/dev/null || true
 
       # Update nuclei templates
       nuclei -update-templates 2>/dev/null || true
@@ -126,15 +133,18 @@ GOBASH
 
     # Install Python tools
     pip3 install --break-system-packages -q \
-      wafw00f \
       sslyze \
       pyjwt \
       requests \
       beautifulsoup4 \
-      graphql-core \
+      shodan \
+      h8mail \
+      nosqlmap \
+      tplmap \
+      git-dumper \
       2>/dev/null || true
 
-    # Install jwt_tool
+    # Install jwt_tool (Phase 3.1)
     if [ ! -d /opt/jwt_tool ]; then
       git clone --depth 1 https://github.com/ticarpi/jwt_tool.git /opt/jwt_tool 2>/dev/null || true
       pip3 install --break-system-packages -q -r /opt/jwt_tool/requirements.txt 2>/dev/null || true
@@ -142,7 +152,15 @@ GOBASH
       chmod +x /opt/jwt_tool/jwt_tool.py 2>/dev/null || true
     fi
 
-    # Install ysoserial for Java deserialization testing
+    # Install LinkFinder (Phase 2.7)
+    if [ ! -d /opt/LinkFinder ]; then
+      git clone --depth 1 https://github.com/GerbenJavado/LinkFinder.git /opt/LinkFinder 2>/dev/null || true
+      pip3 install --break-system-packages -q -r /opt/LinkFinder/requirements.txt 2>/dev/null || true
+      ln -sf /opt/LinkFinder/linkfinder.py /usr/local/bin/linkfinder 2>/dev/null || true
+      chmod +x /opt/LinkFinder/linkfinder.py 2>/dev/null || true
+    fi
+
+    # Install ysoserial for Java deserialization testing (Phase 6.5)
     if [ ! -f /opt/ysoserial.jar ]; then
       wget -q "https://github.com/frohoff/ysoserial/releases/latest/download/ysoserial-all.jar" -O /opt/ysoserial.jar 2>/dev/null || true
       echo '#!/bin/bash' > /usr/local/bin/ysoserial
@@ -150,7 +168,44 @@ GOBASH
       chmod +x /usr/local/bin/ysoserial
     fi
 
-    echo "Kali Linux Pentest environment ready!"
+    # Install phpggc for PHP deserialization testing (Phase 6.5)
+    if [ ! -d /opt/phpggc ]; then
+      git clone --depth 1 https://github.com/ambionics/phpggc.git /opt/phpggc 2>/dev/null || true
+      ln -sf /opt/phpggc/phpggc /usr/local/bin/phpggc 2>/dev/null || true
+      chmod +x /opt/phpggc/phpggc 2>/dev/null || true
+    fi
+
+    # Install kube-hunter for Kubernetes testing (Phase 8.3)
+    pip3 install --break-system-packages -q kube-hunter 2>/dev/null || true
+
+    # Install Kiterunner wordlists
+    if [ ! -d /opt/wordlists/kiterunner ]; then
+      mkdir -p /opt/wordlists/kiterunner
+      wget -q "https://wordlists-cdn.assetnote.io/data/kiterunner/routes-large.kite.tar.gz" -O /tmp/routes.tar.gz 2>/dev/null || true
+      tar -xzf /tmp/routes.tar.gz -C /opt/wordlists/kiterunner 2>/dev/null || true
+      rm -f /tmp/routes.tar.gz
+    fi
+
+    # Source secrets for API-based tools
+    if [ -f /vagrant/.vagrant/secret.yaml ]; then
+      # Parse YAML and export as environment variables
+      # Add to vagrant user's bashrc
+      cat >> /home/vagrant/.bashrc << 'SECRETS'
+
+# Load API keys from secret.yaml if it exists
+if [ -f /vagrant/.vagrant/secret.yaml ]; then
+  export SHODAN_API_KEY=$(grep -E "^shodan_api_key:" /vagrant/.vagrant/secret.yaml | awk '{print $2}' | tr -d '"')
+  export CENSYS_API_ID=$(grep -E "^censys_api_id:" /vagrant/.vagrant/secret.yaml | awk '{print $2}' | tr -d '"')
+  export CENSYS_API_SECRET=$(grep -E "^censys_api_secret:" /vagrant/.vagrant/secret.yaml | awk '{print $2}' | tr -d '"')
+  export SECURITYTRAILS_API_KEY=$(grep -E "^securitytrails_api_key:" /vagrant/.vagrant/secret.yaml | awk '{print $2}' | tr -d '"')
+  export DEHASHED_API_KEY=$(grep -E "^dehashed_api_key:" /vagrant/.vagrant/secret.yaml | awk '{print $2}' | tr -d '"')
+  export DEHASHED_EMAIL=$(grep -E "^dehashed_email:" /vagrant/.vagrant/secret.yaml | awk '{print $2}' | tr -d '"')
+fi
+SECRETS
+    fi
+
+    echo "VAPT Pentest environment ready!"
+    echo "Configure API keys in /vagrant/.vagrant/secret.yaml"
   SHELL
 
   # Shared folder for easy file transfer
